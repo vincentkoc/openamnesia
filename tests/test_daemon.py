@@ -3,8 +3,15 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from amnesia.config import AppConfig, DaemonConfig, ExportConfig, HookConfig, SourceConfig, StoreConfig
-from amnesia_daemon import Daemon
+from amnesia.config import (
+    AppConfig,
+    DaemonConfig,
+    ExportConfig,
+    HookConfig,
+    SourceConfig,
+    StoreConfig,
+)
+from amnesia.daemon import Daemon
 
 
 def test_daemon_ingests_and_writes_audit(tmp_path: Path) -> None:

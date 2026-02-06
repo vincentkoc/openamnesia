@@ -48,7 +48,7 @@ class AppConfig:
     hooks: HookConfig = field(default_factory=HookConfig)
 
     @staticmethod
-    def default() -> "AppConfig":
+    def default() -> AppConfig:
         return AppConfig(
             sources=[
                 SourceConfig(name="cursor", path="./ingest/cursor", pattern="*.jsonl"),

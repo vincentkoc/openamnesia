@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from amnesia.connectors.base import SourceRecord
 from amnesia.pipeline.normalize import normalize_records
@@ -14,7 +14,7 @@ def test_normalize_prefixes_source_in_session_id() -> None:
             file_path="a.jsonl",
             line_number=1,
             content="hello",
-            ts=datetime(2026, 2, 6, 0, 0, tzinfo=timezone.utc),
+            ts=datetime(2026, 2, 6, 0, 0, tzinfo=UTC),
             session_hint="abc",
         )
     ]
@@ -30,7 +30,7 @@ def test_sessionize_uses_session_key() -> None:
             file_path="x.log",
             line_number=1,
             content="run",
-            ts=datetime(2026, 2, 6, 0, 0, tzinfo=timezone.utc),
+            ts=datetime(2026, 2, 6, 0, 0, tzinfo=UTC),
             session_hint="s1",
         )
     ]

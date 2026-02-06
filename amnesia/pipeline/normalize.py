@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import defaultdict
-from datetime import timezone
+from datetime import UTC
 
 from amnesia.connectors.base import SourceRecord
 from amnesia.models import Event, utc_now
@@ -14,7 +14,7 @@ def normalize_records(records: list[SourceRecord]) -> list[Event]:
 
     for record in records:
         ts = record.ts or utc_now()
-        ts = ts.astimezone(timezone.utc)
+        ts = ts.astimezone(UTC)
         raw_session = record.session_hint or stable_session_id(
             f"{record.source}:{record.file_path}"
         )

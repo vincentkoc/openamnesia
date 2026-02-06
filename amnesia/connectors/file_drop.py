@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from amnesia.connectors.base import ConnectorSettings, SourceRecord
@@ -103,8 +103,8 @@ class FileDropConnector:
             normalized = value.replace("Z", "+00:00")
             parsed = datetime.fromisoformat(normalized)
             if parsed.tzinfo is None:
-                return parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
+                return parsed.replace(tzinfo=UTC)
+            return parsed.astimezone(UTC)
         except ValueError:
             return None
 

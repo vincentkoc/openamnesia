@@ -32,7 +32,7 @@ class RuntimeState:
     per_source: dict
 
     @staticmethod
-    def empty() -> "RuntimeState":
+    def empty() -> RuntimeState:
         return RuntimeState(per_source={})
 
 

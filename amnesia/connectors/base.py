@@ -25,8 +25,7 @@ class SourceRecord:
 class SourceConnector(Protocol):
     source_name: str
 
-    def poll(self, state: dict) -> tuple[list[SourceRecord], dict]:
-        ...
+    def poll(self, state: dict) -> tuple[list[SourceRecord], dict]: ...
 
 
 @dataclass(slots=True)

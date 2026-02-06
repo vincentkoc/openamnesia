@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from amnesia.models import Event, IngestAudit, Moment, Session, SourceStatus, utc_now
@@ -34,7 +34,7 @@ class SQLiteStore:
                 """,
                 (
                     event.event_id,
-                    event.ts.astimezone(timezone.utc).isoformat(),
+                    event.ts.astimezone(UTC).isoformat(),
                     event.source,
                     event.session_id,
                     event.turn_index,
