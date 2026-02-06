@@ -1,0 +1,23 @@
+sources:
+  - name: cursor
+    enabled: true
+    path: ./ingest/cursor
+    pattern: "*.jsonl"
+
+  - name: codex
+    enabled: true
+    path: ./ingest/codex
+    pattern: "*.jsonl"
+
+  - name: terminal
+    enabled: true
+    path: ./ingest/terminal
+    pattern: "*.log"
+
+store:
+  backend: sqlite
+  dsn: sqlite:///./data/amnesia.db
+
+daemon:
+  poll_interval_seconds: 5
+  state_path: ./.amnesia_state.yaml

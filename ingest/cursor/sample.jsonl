@@ -1,0 +1,2 @@
+{"ts":"2026-02-06T17:00:00Z","session_id":"cur-1","actor":"user","content":"Need to fix failing tests"}
+{"ts":"2026-02-06T17:00:15Z","session_id":"cur-1","actor":"assistant","content":"Done: tests now pass"}
