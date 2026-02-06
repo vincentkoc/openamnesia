@@ -48,8 +48,33 @@ class LiteLLMProvider:
             request["temperature"] = kwargs.get("temperature", self.temperature)
 
         response = completion(**request)
-        choices = response.get("choices", []) if isinstance(response, dict) else []
+        if isinstance(response, dict):
+            choices = response.get("choices", []) or []
+        else:
+            choices = getattr(response, "choices", []) or []
         if not choices:
             return ""
-        message = choices[0].get("message", {})
-        return str(message.get("content", "")).strip()
+        first = choices[0]
+        if isinstance(first, dict):
+            message = first.get("message", {})
+        else:
+            message = getattr(first, "message", {})
+
+        if isinstance(message, dict):
+            content = message.get("content", "")
+        else:
+            content = getattr(message, "content", "")
+
+        if isinstance(content, list):
+            chunks: list[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    text = item.get("text")
+                    if text:
+                        chunks.append(str(text))
+                else:
+                    text = getattr(item, "text", None)
+                    if text:
+                        chunks.append(str(text))
+            content = "\n".join(chunks)
+        return str(content or "").strip()
