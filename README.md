@@ -106,6 +106,25 @@ sources:
     pattern: "*.jsonl"
     include_contains: ["dinner", "plan"]
     exclude_contains: ["spam"]
+    include_groups: ["lauren", "family"]
+    exclude_groups: ["otp", "bank"]
+    include_actors: ["me", "contact"]
+    exclude_actors: ["system"]
+    since_ts: "2025-04-01T00:00:00Z"
+    until_ts: "2025-04-30T23:59:59Z"
+```
+
+Universal filter dimensions:
+- content: `include_contains` / `exclude_contains`
+- group/chat: `include_groups` / `exclude_groups`
+- actor: `include_actors` / `exclude_actors`
+- time window: `since_ts` / `until_ts` (ISO-8601)
+
+`scripts/test_source.py` supports CLI overrides:
+```bash
+python scripts/test_source.py --config config.yaml --source imessage \
+  --include-group lauren --exclude-group otp \
+  --include-actor contact --since 2025-04-01T00:00:00Z --until 2025-04-10T00:00:00Z
 ```
 
 ## Source helper script

@@ -20,8 +20,15 @@ from amnesia.exports.md_daily import export_daily_moments
 from amnesia.exports.skill_yaml import export_skills_yaml
 from amnesia.filters import (
     SourceFilterPipeline,
+    make_exclude_actors_filter,
     make_exclude_contains_filter,
+    make_exclude_groups_filter,
+    make_include_actors_filter,
     make_include_contains_filter,
+    make_include_groups_filter,
+    make_since_filter,
+    make_until_filter,
+    parse_iso_ts,
 )
 from amnesia.internal.events import EventBus, InternalEvent
 from amnesia.models import IngestAudit, SourceStatus, utc_now
@@ -83,6 +90,16 @@ def build_source_filter_pipeline(source: SourceConfig) -> SourceFilterPipeline:
         pipeline.add(make_include_contains_filter(source.include_contains))
     if source.exclude_contains:
         pipeline.add(make_exclude_contains_filter(source.exclude_contains))
+    if source.include_groups:
+        pipeline.add(make_include_groups_filter(source.include_groups))
+    if source.exclude_groups:
+        pipeline.add(make_exclude_groups_filter(source.exclude_groups))
+    if source.include_actors:
+        pipeline.add(make_include_actors_filter(source.include_actors))
+    if source.exclude_actors:
+        pipeline.add(make_exclude_actors_filter(source.exclude_actors))
+    pipeline.add(make_since_filter(parse_iso_ts(source.since_ts)))
+    pipeline.add(make_until_filter(parse_iso_ts(source.until_ts)))
     return pipeline
 
 

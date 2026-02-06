@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +18,15 @@ from amnesia.connectors.registry import build_connectors
 from amnesia.constants import AUTO_REQUEST_DISK_ACCESS_ON_PERMISSION_ERROR
 from amnesia.filters import (
     SourceFilterPipeline,
+    make_exclude_actors_filter,
     make_exclude_contains_filter,
+    make_exclude_groups_filter,
+    make_include_actors_filter,
     make_include_contains_filter,
+    make_include_groups_filter,
+    make_since_filter,
+    make_until_filter,
+    parse_iso_ts,
 )
 from amnesia.internal.events import EventBus
 from amnesia.utils.display.terminal import print_banner
@@ -44,6 +52,16 @@ def _build_filter_pipeline(source_cfg: SourceConfig) -> SourceFilterPipeline:
         pipeline.add(make_include_contains_filter(source_cfg.include_contains))
     if source_cfg.exclude_contains:
         pipeline.add(make_exclude_contains_filter(source_cfg.exclude_contains))
+    if source_cfg.include_groups:
+        pipeline.add(make_include_groups_filter(source_cfg.include_groups))
+    if source_cfg.exclude_groups:
+        pipeline.add(make_exclude_groups_filter(source_cfg.exclude_groups))
+    if source_cfg.include_actors:
+        pipeline.add(make_include_actors_filter(source_cfg.include_actors))
+    if source_cfg.exclude_actors:
+        pipeline.add(make_exclude_actors_filter(source_cfg.exclude_actors))
+    pipeline.add(make_since_filter(parse_iso_ts(source_cfg.since_ts)))
+    pipeline.add(make_until_filter(parse_iso_ts(source_cfg.until_ts)))
     return pipeline
 
 
@@ -57,6 +75,39 @@ def _parse_args() -> argparse.Namespace:
         help="Persistent source state file",
     )
     parser.add_argument("--sample", type=int, default=5, help="Show first N records")
+    parser.add_argument(
+        "--order",
+        choices=["asc", "desc"],
+        default="desc",
+        help="Sample ordering by timestamp (desc=newest first)",
+    )
+    parser.add_argument("--group-limit", type=int, default=20, help="Max groups to display")
+    parser.add_argument(
+        "--include-group",
+        action="append",
+        default=[],
+        help="Group/chat include filter (contains, repeatable)",
+    )
+    parser.add_argument(
+        "--exclude-group",
+        action="append",
+        default=[],
+        help="Group/chat exclude filter (contains, repeatable)",
+    )
+    parser.add_argument(
+        "--include-actor",
+        action="append",
+        default=[],
+        help="Actor include filter (contains, repeatable)",
+    )
+    parser.add_argument(
+        "--exclude-actor",
+        action="append",
+        default=[],
+        help="Actor exclude filter (contains, repeatable)",
+    )
+    parser.add_argument("--since", help="Only include records >= ISO timestamp")
+    parser.add_argument("--until", help="Only include records <= ISO timestamp")
     parser.add_argument("--json", action="store_true", help="Output JSON")
     parser.add_argument(
         "--no-save-state",
@@ -94,6 +145,16 @@ def main() -> int:
     if args.source == "imessage" and "mode" not in source_cfg.options:
         source_cfg.options["mode"] = "sqlite"
 
+    # CLI filters extend config filters for quick experimentation.
+    source_cfg.include_groups = [*source_cfg.include_groups, *args.include_group]
+    source_cfg.exclude_groups = [*source_cfg.exclude_groups, *args.exclude_group]
+    source_cfg.include_actors = [*source_cfg.include_actors, *args.include_actor]
+    source_cfg.exclude_actors = [*source_cfg.exclude_actors, *args.exclude_actor]
+    if args.since:
+        source_cfg.since_ts = args.since
+    if args.until:
+        source_cfg.until_ts = args.until
+
     if not args.json:
         mode = str(source_cfg.options.get("mode", "default"))
         console.print(
@@ -106,6 +167,12 @@ def main() -> int:
                         f"mode={mode}",
                         f"reset_state={args.reset_state}",
                         f"sample={args.sample}",
+                        f"since={source_cfg.since_ts or '-'}",
+                        f"until={source_cfg.until_ts or '-'}",
+                        f"include_groups={source_cfg.include_groups}",
+                        f"exclude_groups={source_cfg.exclude_groups}",
+                        f"include_actors={source_cfg.include_actors}",
+                        f"exclude_actors={source_cfg.exclude_actors}",
                     ]
                 ),
                 title="Source Test Task",
@@ -169,11 +236,12 @@ def main() -> int:
         return 2
     pipeline = _build_filter_pipeline(source_cfg)
     filtered_records, dropped = pipeline.apply(poll_result.records)
+    ordered_records = _order_records(filtered_records, order=args.order)
     bus.emit(
         "source.test.completed",
         source=args.source,
         seen=poll_result.stats.items_seen,
-        ingested=len(filtered_records),
+        ingested=len(ordered_records),
         filtered=dropped,
         groups=poll_result.stats.groups_seen,
     )
@@ -186,18 +254,20 @@ def main() -> int:
     payload = {
         "source": args.source,
         "items_seen": poll_result.stats.items_seen,
-        "items_ingested": len(filtered_records),
+        "items_ingested": len(ordered_records),
         "items_filtered": dropped,
         "groups_seen": poll_result.stats.groups_seen,
         "item_counts_by_group": poll_result.stats.item_counts_by_group,
+        "time_range": _time_range(ordered_records),
         "sample_records": [
             {
+                "ts": rec.ts.isoformat() if rec.ts is not None else None,
                 "session_hint": rec.session_hint,
                 "group_hint": rec.group_hint,
                 "actor": rec.actor,
                 "content": rec.content,
             }
-            for rec in filtered_records[: max(0, args.sample)]
+            for rec in ordered_records[: max(0, args.sample)]
         ],
         "events": recent_events,
     }
@@ -209,25 +279,89 @@ def main() -> int:
     console.print(
         f"[bold cyan]Source test:[/bold cyan] {args.source} "
         f"seen={payload['items_seen']} ingested={payload['items_ingested']} "
-        f"filtered={payload['items_filtered']} groups={payload['groups_seen']}"
+        f"filtered={payload['items_filtered']} groups={payload['groups_seen']} "
+        f"order={args.order}"
     )
 
+    tr = payload["time_range"]
+    if tr["oldest"] is not None:
+        console.print(
+            f"[dim]Time range:[/dim] oldest={tr['oldest']} newest={tr['newest']} "
+            f"(records with timestamps={tr['timestamped_records']})"
+        )
+    else:
+        console.print("[dim]Time range:[/dim] no timestamps available")
+
+    group_rows = _build_group_rows(ordered_records)
     groups_table = Table(title="Groups", show_header=True, header_style="bold cyan")
     groups_table.add_column("Group")
     groups_table.add_column("Items", justify="right")
-    for group, count in sorted(payload["item_counts_by_group"].items()):
-        groups_table.add_row(group, str(count))
+    groups_table.add_column("Share", justify="right")
+    groups_table.add_column("Latest", style="dim")
+    total = max(1, len(ordered_records))
+    for row in group_rows[: max(0, args.group_limit)]:
+        groups_table.add_row(
+            row["group"],
+            str(row["count"]),
+            f"{(row['count'] / total):.1%}",
+            row["latest_ts"] or "-",
+        )
     console.print(groups_table)
 
     records_table = Table(title="Sample Records", show_header=True, header_style="bold cyan")
+    records_table.add_column("Time", style="dim")
     records_table.add_column("Actor")
     records_table.add_column("Group")
     records_table.add_column("Content", overflow="fold")
     for item in payload["sample_records"]:
-        records_table.add_row(item["actor"], str(item.get("group_hint") or "-"), item["content"])
+        records_table.add_row(
+            item["ts"] or "-",
+            item["actor"],
+            str(item.get("group_hint") or "-"),
+            item["content"],
+        )
     console.print(records_table)
 
     return 0
+
+
+def _order_records(records, order: str):
+    def _key(rec) -> tuple[datetime, int]:
+        ts = rec.ts if rec.ts is not None else datetime(1970, 1, 1, tzinfo=UTC)
+        return (ts, rec.line_number)
+
+    return sorted(records, key=_key, reverse=(order == "desc"))
+
+
+def _time_range(records) -> dict[str, Any]:
+    stamped = [rec.ts for rec in records if rec.ts is not None]
+    if not stamped:
+        return {"oldest": None, "newest": None, "timestamped_records": 0}
+    oldest = min(stamped)
+    newest = max(stamped)
+    return {
+        "oldest": oldest.isoformat(),
+        "newest": newest.isoformat(),
+        "timestamped_records": len(stamped),
+    }
+
+
+def _build_group_rows(records) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for rec in records:
+        group = str(rec.group_hint or rec.session_hint or "unknown_group")
+        bucket = grouped.setdefault(group, {"count": 0, "latest_ts": None})
+        bucket["count"] += 1
+        ts = rec.ts.isoformat() if rec.ts is not None else None
+        if ts is not None:
+            if bucket["latest_ts"] is None or ts > bucket["latest_ts"]:
+                bucket["latest_ts"] = ts
+
+    rows = [
+        {"group": group, "count": data["count"], "latest_ts": data["latest_ts"]}
+        for group, data in grouped.items()
+    ]
+    return sorted(rows, key=lambda row: (row["count"], row["latest_ts"] or ""), reverse=True)
 
 
 if __name__ == "__main__":

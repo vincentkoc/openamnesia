@@ -16,6 +16,12 @@ class SourceConfig:
     options: dict[str, Any] = field(default_factory=dict)
     include_contains: list[str] = field(default_factory=list)
     exclude_contains: list[str] = field(default_factory=list)
+    include_groups: list[str] = field(default_factory=list)
+    exclude_groups: list[str] = field(default_factory=list)
+    include_actors: list[str] = field(default_factory=list)
+    exclude_actors: list[str] = field(default_factory=list)
+    since_ts: str | None = None
+    until_ts: str | None = None
 
 
 @dataclass(slots=True)
@@ -99,6 +105,12 @@ def load_config(path: str | Path | None) -> AppConfig:
                 options=dict(item.get("options", {})),
                 include_contains=list(item.get("include_contains", [])),
                 exclude_contains=list(item.get("exclude_contains", [])),
+                include_groups=list(item.get("include_groups", [])),
+                exclude_groups=list(item.get("exclude_groups", [])),
+                include_actors=list(item.get("include_actors", [])),
+                exclude_actors=list(item.get("exclude_actors", [])),
+                since_ts=item.get("since_ts"),
+                until_ts=item.get("until_ts"),
             )
         )
 
@@ -144,6 +156,12 @@ def dump_default_config(path: str | Path) -> None:
                 "options": source.options,
                 "include_contains": source.include_contains,
                 "exclude_contains": source.exclude_contains,
+                "include_groups": source.include_groups,
+                "exclude_groups": source.exclude_groups,
+                "include_actors": source.include_actors,
+                "exclude_actors": source.exclude_actors,
+                "since_ts": source.since_ts,
+                "until_ts": source.until_ts,
             }
             for source in cfg.sources
         ],

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from amnesia.connectors.base import SourceRecord
 
@@ -34,24 +35,107 @@ class SourceFilterPipeline:
 
 
 def make_include_contains_filter(needles: list[str]) -> RecordFilter:
-    lowered = [item.lower() for item in needles if item.strip()]
+    lowered = _normalized_terms(needles)
 
     def _predicate(record: SourceRecord) -> bool:
         if not lowered:
             return True
         content = record.content.lower()
-        return any(needle in content for needle in lowered)
+        return _contains_any(content, lowered)
 
     return _predicate
 
 
 def make_exclude_contains_filter(needles: list[str]) -> RecordFilter:
-    lowered = [item.lower() for item in needles if item.strip()]
+    lowered = _normalized_terms(needles)
 
     def _predicate(record: SourceRecord) -> bool:
         if not lowered:
             return True
         content = record.content.lower()
-        return not any(needle in content for needle in lowered)
+        return not _contains_any(content, lowered)
 
     return _predicate
+
+
+def make_include_groups_filter(needles: list[str]) -> RecordFilter:
+    lowered = _normalized_terms(needles)
+
+    def _predicate(record: SourceRecord) -> bool:
+        if not lowered:
+            return True
+        value = (record.group_hint or record.session_hint or "").lower()
+        return _contains_any(value, lowered)
+
+    return _predicate
+
+
+def make_exclude_groups_filter(needles: list[str]) -> RecordFilter:
+    lowered = _normalized_terms(needles)
+
+    def _predicate(record: SourceRecord) -> bool:
+        if not lowered:
+            return True
+        value = (record.group_hint or record.session_hint or "").lower()
+        return not _contains_any(value, lowered)
+
+    return _predicate
+
+
+def make_include_actors_filter(needles: list[str]) -> RecordFilter:
+    lowered = _normalized_terms(needles)
+
+    def _predicate(record: SourceRecord) -> bool:
+        if not lowered:
+            return True
+        return _contains_any(record.actor.lower(), lowered)
+
+    return _predicate
+
+
+def make_exclude_actors_filter(needles: list[str]) -> RecordFilter:
+    lowered = _normalized_terms(needles)
+
+    def _predicate(record: SourceRecord) -> bool:
+        if not lowered:
+            return True
+        return not _contains_any(record.actor.lower(), lowered)
+
+    return _predicate
+
+
+def make_since_filter(since: datetime | None) -> RecordFilter:
+    def _predicate(record: SourceRecord) -> bool:
+        if since is None:
+            return True
+        if record.ts is None:
+            return False
+        return record.ts >= since
+
+    return _predicate
+
+
+def make_until_filter(until: datetime | None) -> RecordFilter:
+    def _predicate(record: SourceRecord) -> bool:
+        if until is None:
+            return True
+        if record.ts is None:
+            return False
+        return record.ts <= until
+
+    return _predicate
+
+
+def parse_iso_ts(value: str | None) -> datetime | None:
+    if value is None or not value.strip():
+        return None
+    normalized = value.strip().replace("Z", "+00:00")
+    return datetime.fromisoformat(normalized)
+
+
+def _normalized_terms(values: list[str]) -> list[str]:
+    return [item.lower().strip() for item in values if item and item.strip()]
+
+
+def _contains_any(value: str, needles: list[str]) -> bool:
+    return any(needle in value for needle in needles)
