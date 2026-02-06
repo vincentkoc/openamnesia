@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,7 +17,11 @@ from rich.table import Table
 from amnesia import __version__
 from amnesia.config import SourceConfig, load_config
 from amnesia.connectors.registry import build_connectors
-from amnesia.constants import AUTO_REQUEST_DISK_ACCESS_ON_PERMISSION_ERROR, SOURCE_TEST_DEBUG
+from amnesia.constants import (
+    AUTO_REQUEST_DISK_ACCESS_ON_PERMISSION_ERROR,
+    SOURCE_TEST_DEBUG,
+    SOURCE_TEST_DEBUG_VERBOSE,
+)
 from amnesia.filters import (
     SourceFilterPipeline,
     make_exclude_actors_filter,
@@ -31,6 +36,7 @@ from amnesia.filters import (
 )
 from amnesia.internal.events import EventBus
 from amnesia.utils.display.terminal import print_banner
+from amnesia.utils.logging import debug_event, get_logger, setup_logging
 from amnesia.utils.macos import open_full_disk_access_settings
 
 
@@ -82,7 +88,12 @@ def _parse_args() -> argparse.Namespace:
         default="desc",
         help="Sample ordering by timestamp (desc=newest first)",
     )
-    parser.add_argument("--group-limit", type=int, default=20, help="Max groups to display")
+    parser.add_argument("--group-limit", type=int, default=10, help="Max groups to display")
+    parser.add_argument(
+        "--include-filtered-groups",
+        action="store_true",
+        help="Include groups with '(filtered)' suffix in group and sample views",
+    )
     parser.add_argument(
         "--include-group",
         action="append",
@@ -126,18 +137,21 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
     console = Console()
-    debug_trace: list[tuple[str, str]] = []
+    log_level = os.getenv("AMNESIA_LOG_LEVEL", "DEBUG" if SOURCE_TEST_DEBUG else "INFO")
+    setup_logging(level=log_level)
+    logger = get_logger("amnesia.source_test")
+    logger.info("OpenAmnesia source tester logging configured to level: %s", log_level.upper())
 
-    def dbg(step: str, detail: str) -> None:
-        if SOURCE_TEST_DEBUG and not args.json:
-            debug_trace.append((step, detail))
+    def dbg(event: str, **fields: Any) -> None:
+        debug_event(logger, event, **fields)
 
     if not args.json:
         print_banner()
         console.print(f"[bold]OpenAmnesia[/bold] 🧠  [dim]v{__version__}[/dim]")
-    dbg("boot", f"argv_source={args.source} config={args.config}")
+        console.rule("[bold cyan]Source Test[/bold cyan]")
+    dbg("source_test_start", source=args.source, config=args.config)
     cfg = load_config(args.config)
-    dbg("config.loaded", f"sources={len(cfg.sources)}")
+    dbg("config_loaded", sources=len(cfg.sources))
 
     source_cfg = next((src for src in cfg.sources if src.name == args.source and src.enabled), None)
     if source_cfg is None:
@@ -153,12 +167,19 @@ def main() -> int:
     connectors = build_connectors([source_cfg])
     connector = connectors[0]
     dbg(
-        "connector.ready",
-        f"type={connector.__class__.__name__} root={source_cfg.path} pattern={source_cfg.pattern}",
+        "connector_ready",
+        type=connector.__class__.__name__,
+        root=source_cfg.path,
+        pattern=source_cfg.pattern,
     )
     if args.source == "imessage" and "mode" not in source_cfg.options:
         source_cfg.options["mode"] = "sqlite"
-    dbg("source.options", json.dumps(source_cfg.options, ensure_ascii=True, sort_keys=True))
+    dbg(
+        "source_options",
+        mode=source_cfg.options.get("mode"),
+        db_path=source_cfg.options.get("db_path"),
+        limit=source_cfg.options.get("limit"),
+    )
 
     # CLI filters extend config filters for quick experimentation.
     source_cfg.include_groups = [*source_cfg.include_groups, *args.include_group]
@@ -169,29 +190,30 @@ def main() -> int:
         source_cfg.since_ts = args.since
     if args.until:
         source_cfg.until_ts = args.until
-    dbg("filters.active", "; ".join(_active_filters(source_cfg)) or "none")
+    active_filters = _active_filters(source_cfg)
+    dbg("filters_active", filter_count=len(active_filters), filters=active_filters or "none")
 
     if not args.json:
         mode = str(source_cfg.options.get("mode", "default"))
-        console.print("[bold cyan]Source Test Task[/bold cyan]")
-        console.print(f"[dim]source:[/dim] {args.source}")
-        console.print(f"[dim]config:[/dim] {args.config}")
-        console.print(f"[dim]mode:[/dim] {mode}")
-        console.print(f"[dim]reset_state:[/dim] {args.reset_state}")
-        console.print(f"[dim]sample:[/dim] {args.sample}")
-        active_filters = _active_filters(source_cfg)
+        console.print(
+            "[bold]task[/bold] "
+            f"source={args.source} config={args.config} mode={mode} "
+            f"order={args.order} sample={args.sample} reset_state={args.reset_state}"
+        )
         if active_filters:
-            console.print("[dim]filters:[/dim]")
+            console.print("[bold]filters[/bold]")
             for line in active_filters:
-                console.print(f"  - {line}")
+                console.print(f"  [dim]-[/dim] {line}")
+        else:
+            console.print("[bold]filters[/bold] [dim]none[/dim]")
 
     state_path = Path(args.state_path)
     state_doc = _load_state(state_path)
-    dbg("state.loaded", f"path={state_path} keys={list(state_doc.keys())}")
+    dbg("state_loaded", path=str(state_path), keys=list(state_doc.keys()))
     source_state = {}
     if not args.reset_state:
         source_state = state_doc.get("per_source", {}).get(args.source, {})
-    dbg("state.source", json.dumps(source_state, ensure_ascii=True, sort_keys=True))
+    dbg("state_source", state=source_state)
 
     bus = EventBus()
     recent_events: list[dict[str, Any]] = []
@@ -201,19 +223,21 @@ def main() -> int:
     )
 
     bus.emit("source.test.started", source=args.source)
+    dbg("hook_emit", topic="source.test.started")
     try:
         started_poll = time.perf_counter()
         poll_result = connector.poll(source_state)
         poll_ms = (time.perf_counter() - started_poll) * 1000.0
         dbg(
-            "poll.completed",
-            (
-                f"ms={poll_ms:.2f} seen={poll_result.stats.items_seen} "
-                f"groups={poll_result.stats.groups_seen} state_keys={len(poll_result.state)}"
-            ),
+            "poll_completed",
+            ms=round(poll_ms, 2),
+            seen=poll_result.stats.items_seen,
+            groups=poll_result.stats.groups_seen,
+            state_keys=len(poll_result.state),
         )
     except Exception as exc:
         bus.emit("source.test.error", source=args.source, error=str(exc))
+        dbg("hook_emit", topic="source.test.error", error=str(exc))
         request_attempted = False
         request_success = False
         if (
@@ -238,8 +262,7 @@ def main() -> int:
             print(json.dumps(payload, ensure_ascii=True, indent=2))
             return 2
 
-        dbg("poll.error", str(exc))
-        _render_debug_trace(console, debug_trace)
+        dbg("poll_error", error=str(exc))
         console.print(
             Panel(
                 "[bold]Ingestion failed[/bold]\n"
@@ -253,12 +276,14 @@ def main() -> int:
         )
         return 2
     pipeline = _build_filter_pipeline(source_cfg)
-    dbg("filters.pipeline", f"filter_count={len(pipeline.filters)}")
+    dbg("filters_pipeline", filter_count=len(pipeline.filters))
     filtered_records, dropped = pipeline.apply(poll_result.records)
     ordered_records = _order_records(filtered_records, order=args.order)
     dbg(
-        "filters.result",
-        f"ingested={len(ordered_records)} dropped={dropped} order={args.order}",
+        "filters_result",
+        ingested=len(ordered_records),
+        dropped=dropped,
+        order=args.order,
     )
     bus.emit(
         "source.test.completed",
@@ -268,12 +293,30 @@ def main() -> int:
         filtered=dropped,
         groups=poll_result.stats.groups_seen,
     )
+    dbg(
+        "hook_emit",
+        topic="source.test.completed",
+        source=args.source,
+        seen=poll_result.stats.items_seen,
+        ingested=len(ordered_records),
+        filtered=dropped,
+    )
 
     if not args.no_save_state:
         state_doc.setdefault("per_source", {})
         state_doc["per_source"][args.source] = poll_result.state
         _save_state(state_path, state_doc)
-        dbg("state.saved", f"path={state_path}")
+        dbg("state_saved", path=str(state_path))
+
+    group_rows = _build_group_rows(
+        ordered_records, include_filtered_groups=args.include_filtered_groups
+    )
+    sample_records = _sample_records_diversified(
+        ordered_records,
+        sample_size=max(0, args.sample),
+        preferred_groups=[row["group"] for row in group_rows[: max(1, args.group_limit)]],
+        include_filtered_groups=args.include_filtered_groups,
+    )
 
     payload = {
         "source": args.source,
@@ -291,7 +334,7 @@ def main() -> int:
                 "actor": rec.actor,
                 "content": rec.content,
             }
-            for rec in ordered_records[: max(0, args.sample)]
+            for rec in sample_records
         ],
         "events": recent_events,
     }
@@ -301,55 +344,52 @@ def main() -> int:
         return 0
 
     console.print(
-        f"[bold cyan]Source test:[/bold cyan] {args.source} "
+        f"[bold cyan]result[/bold cyan] source={args.source} "
         f"seen={payload['items_seen']} ingested={payload['items_ingested']} "
-        f"filtered={payload['items_filtered']} groups={payload['groups_seen']} "
-        f"order={args.order}"
+        f"filtered={payload['items_filtered']} groups={payload['groups_seen']} order={args.order}"
     )
 
     tr = payload["time_range"]
     if tr["oldest"] is not None:
-        oldest_rel = _relative_time_text(tr["oldest"])
-        newest_rel = _relative_time_text(tr["newest"])
+        oldest_rel = _pretty_ts_full(tr["oldest"])
+        newest_rel = _pretty_ts_full(tr["newest"])
         console.print(
-            f"[dim]Time range:[/dim] oldest={oldest_rel} ({tr['oldest']}) "
-            f"newest={newest_rel} ({tr['newest']}) "
-            f"(records with timestamps={tr['timestamped_records']})"
+            f"[bold]time-range[/bold] oldest={oldest_rel} "
+            f"newest={newest_rel} timestamped={tr['timestamped_records']}"
         )
     else:
-        console.print("[dim]Time range:[/dim] no timestamps available")
+        console.print("[bold]time-range[/bold] [dim]none[/dim]")
 
-    group_rows = _build_group_rows(ordered_records)
     groups_table = Table(title="Groups", show_header=True, header_style="bold cyan")
     groups_table.add_column("Group")
     groups_table.add_column("Items", justify="right")
     groups_table.add_column("Share", justify="right")
-    groups_table.add_column("Latest", style="dim")
+    groups_table.add_column("Latest", style="dim", no_wrap=True)
     total = max(1, len(ordered_records))
     for row in group_rows[: max(0, args.group_limit)]:
         groups_table.add_row(
             row["group"],
             str(row["count"]),
             f"{(row['count'] / total):.1%}",
-            _pretty_ts(row["latest_ts"]),
+            _pretty_ts_short(row["latest_ts"]),
         )
     console.print(groups_table)
 
     records_table = Table(title="Sample Records", show_header=True, header_style="bold cyan")
-    records_table.add_column("Time", style="dim")
+    records_table.add_column("Time", style="dim", no_wrap=True)
     records_table.add_column("Actor")
     records_table.add_column("Group")
-    records_table.add_column("Content", overflow="fold")
+    records_table.add_column("Content", overflow="ellipsis", no_wrap=True)
     for item in payload["sample_records"]:
         records_table.add_row(
-            _pretty_ts(item["ts"]),
+            _pretty_ts_short(item["ts"]),
             item["actor"],
             str(item.get("group_hint") or "-"),
             _clip_one_line(item["content"], width=console.size.width),
         )
     console.print(records_table)
 
-    if SOURCE_TEST_DEBUG:
+    if SOURCE_TEST_DEBUG and SOURCE_TEST_DEBUG_VERBOSE:
         debug_table = Table(title="Debug Events", show_header=True, header_style="bold magenta")
         debug_table.add_column("Topic")
         debug_table.add_column("Payload", overflow="fold")
@@ -359,7 +399,6 @@ def main() -> int:
                 json.dumps(event.get("payload", {}), ensure_ascii=True),
             )
         console.print(debug_table)
-        _render_debug_trace(console, debug_trace)
 
     return 0
 
@@ -385,10 +424,14 @@ def _time_range(records) -> dict[str, Any]:
     }
 
 
-def _build_group_rows(records) -> list[dict[str, Any]]:
+def _build_group_rows(
+    records, *, include_filtered_groups: bool = False
+) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
     for rec in records:
         group = str(rec.group_hint or rec.session_hint or "unknown_group")
+        if not include_filtered_groups and "(filtered)" in group:
+            continue
         bucket = grouped.setdefault(group, {"count": 0, "latest_ts": None})
         bucket["count"] += 1
         ts = rec.ts.isoformat() if rec.ts is not None else None
@@ -401,6 +444,44 @@ def _build_group_rows(records) -> list[dict[str, Any]]:
         for group, data in grouped.items()
     ]
     return sorted(rows, key=lambda row: (row["count"], row["latest_ts"] or ""), reverse=True)
+
+
+def _sample_records_diversified(
+    records,
+    *,
+    sample_size: int,
+    preferred_groups: list[str],
+    include_filtered_groups: bool,
+):
+    if sample_size <= 0:
+        return []
+
+    by_group: dict[str, list] = {}
+    for rec in records:
+        group = str(rec.group_hint or rec.session_hint or "unknown_group")
+        if not include_filtered_groups and "(filtered)" in group:
+            continue
+        by_group.setdefault(group, []).append(rec)
+
+    if not by_group:
+        return []
+
+    ordered_groups = [group for group in preferred_groups if group in by_group]
+    for group in by_group:
+        if group not in ordered_groups:
+            ordered_groups.append(group)
+
+    picks: list = []
+    idx = 0
+    while len(picks) < sample_size and ordered_groups:
+        group = ordered_groups[idx % len(ordered_groups)]
+        bucket = by_group[group]
+        if bucket:
+            picks.append(bucket.pop(0))
+        idx += 1
+        if idx > sample_size * max(1, len(ordered_groups)) and not any(by_group.values()):
+            break
+    return picks[:sample_size]
 
 
 def _relative_time_text(iso_ts: str | None) -> str:
@@ -431,15 +512,26 @@ def _relative_time_text(iso_ts: str | None) -> str:
     return f"{months}mo ago"
 
 
-def _pretty_ts(iso_ts: str | None) -> str:
+def _pretty_ts_short(iso_ts: str | None) -> str:
     if iso_ts is None:
         return "-"
     return _relative_time_text(iso_ts)
 
 
+def _pretty_ts_full(iso_ts: str | None) -> str:
+    if iso_ts is None:
+        return "-"
+    try:
+        dt = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
+    except ValueError:
+        return iso_ts
+    local_dt = dt.astimezone()
+    return f"{_relative_time_text(iso_ts)} · {local_dt.strftime('%Y-%m-%d %H:%M %Z')}"
+
+
 def _clip_one_line(text: str, width: int) -> str:
     clean = " ".join(str(text).split())
-    max_chars = max(24, min(160, width // 2))
+    max_chars = max(24, min(120, int(width * 0.42)))
     if len(clean) <= max_chars:
         return clean
     return clean[: max_chars - 3] + "..."
@@ -466,15 +558,6 @@ def _active_filters(source_cfg: SourceConfig) -> list[str]:
     return lines
 
 
-def _render_debug_trace(console: Console, trace: list[tuple[str, str]]) -> None:
-    if not trace:
-        return
-    table = Table(title="Debug Trace", show_header=True, header_style="bold yellow")
-    table.add_column("Step")
-    table.add_column("Detail", overflow="fold")
-    for step, detail in trace:
-        table.add_row(step, detail)
-    console.print(table)
 
 
 if __name__ == "__main__":
