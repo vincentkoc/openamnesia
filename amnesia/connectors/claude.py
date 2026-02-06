@@ -32,12 +32,14 @@ class ClaudeConnector(FileDropConnector):
             content = str(parsed.get("display", "")).strip() or line
             ts = self._parse_ts_value(parsed.get("timestamp"))
             session_hint = parsed.get("project")
+            group_hint = session_hint
             return self._build_record(
                 file_path=file_path,
                 line_number=line_number,
                 content=content,
                 ts=ts,
                 session_hint=session_hint,
+                group_hint=group_hint,
                 actor="user",
                 metadata={"source_format": "claude_history"},
             )
@@ -102,25 +104,22 @@ class ClaudeConnector(FileDropConnector):
         tool_result_json: dict | None = None,
         tool_status: str | None = None,
     ):
-        return super()._parse_line(
-            file_path,
-            line_number,
-            json.dumps(
-                {
-                    "content": content,
-                    "actor": actor,
-                    "ts": ts.isoformat() if ts else None,
-                    "session_id": session_hint,
-                    "group_id": group_hint,
-                    "tool_name": tool_name,
-                    "tool_args": tool_args_json,
-                    "tool_result": tool_result_json,
-                    "tool_status": tool_status,
-                    "meta": metadata,
-                },
-                ensure_ascii=True,
-            ),
+        payload = json.dumps(
+            {
+                "content": content,
+                "actor": actor,
+                "ts": ts.isoformat() if ts else None,
+                "session_id": session_hint,
+                "group_id": group_hint,
+                "tool_name": tool_name,
+                "tool_args": tool_args_json,
+                "tool_result": tool_result_json,
+                "tool_status": tool_status,
+                "meta": metadata,
+            },
+            ensure_ascii=True,
         )
+        return FileDropConnector._parse_line(self, file_path, line_number, payload)
 
     @staticmethod
     def _extract_text(content: Any) -> str:
