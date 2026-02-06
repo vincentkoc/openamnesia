@@ -21,6 +21,12 @@ Local-first ingestion service that converts tool/session exhaust into normalized
 - Optional exports:
   - daily notes markdown (`exports/daily/YYYY_MM_DD.md`)
   - skill YAML files (`exports/skills/*.yaml`)
+- Rich terminal display for run summaries and source status tables
+- Internal source event bus (`amnesia/internal/events.py`) for runtime observability
+- Source-level filtering hooks (`include_contains`, `exclude_contains`)
+- Source poll stats propagated to summaries (`items`, `groups`, filtered counts)
+- iMessage source connector (`imessage` JSONL export ingestion)
+- Source-by-source test helper (`scripts/test_source.py`)
 
 ## Project layout
 - `amnesia_daemon.py`: daemon entrypoint + orchestration
@@ -54,6 +60,16 @@ amnesia-daemon --config config.yaml
 amnesia-daemon --config config.yaml --sources
 ```
 
+5. Test one source in isolation:
+```bash
+python scripts/test_source.py --config config.yaml --source imessage
+```
+
+6. Inspect recent internal events:
+```bash
+amnesia-daemon --config config.yaml --once --events-limit 20
+```
+
 5. Generate default config if needed:
 ```bash
 amnesia-daemon --init-config --config config.yaml
@@ -76,6 +92,53 @@ exports:
 
 hooks:
   plugins: []
+
+logging:
+  level: INFO
+```
+
+Source filter config example:
+```yaml
+sources:
+  - name: imessage
+    enabled: true
+    path: ./ingest/imessage
+    pattern: "*.jsonl"
+    include_contains: ["dinner", "plan"]
+    exclude_contains: ["spam"]
+```
+
+## Source helper script
+- `scripts/test_source.py` runs a single connector and persists connector state offsets.
+- Default state path: `./.amnesia_source_test_state.yaml`
+- Useful flags:
+  - `--sample 10` show more sample records
+  - `--json` machine-readable output
+  - `--no-save-state` dry-run polling without offset updates
+  - `--reset-state` re-read source from the beginning for test runs
+
+## Source module template (enforced)
+Each source now follows this normalized shape:
+- `amnesia/sources/{source}/{source}.py`
+- `amnesia/sources/{source}/helpers.py`
+- `amnesia/sources/{source}/reporting.py`
+- `amnesia/sources/{source}/types.py`
+- `amnesia/sources/{source}/ops/{operation}_ops.py`
+
+At runtime, module structure is validated via `amnesia/sources/registry.py`.
+
+## iMessage SQLite mode
+`imessage` defaults to reading macOS Messages DB:
+- `options.mode: sqlite`
+- `options.db_path: ~/Library/Messages/chat.db`
+- state key: `last_rowid` (incremental ingestion)
+
+Fallback mode remains available for local test files:
+```yaml
+sources:
+  - name: imessage
+    options:
+      mode: jsonl
 ```
 
 ## Hook plugins

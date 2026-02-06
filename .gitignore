@@ -211,6 +211,7 @@ __marimo__/
 __pycache__/
 *.pyc
 .amnesia_state.yaml
+.amnesia_source_test_state.yaml
 data/
 
 # OpenAmnesia runtime exports

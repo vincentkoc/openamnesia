@@ -15,7 +15,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup-venv install install-dev test typecheck lint format precommit run-once run clean
+.PHONY: help setup-venv install install-dev test typecheck lint format precommit run-once run source-test clean
 
 help:
 	@echo "Available targets:"
@@ -29,6 +29,7 @@ help:
 	@echo "  precommit    Run pre-commit hooks on all files"
 	@echo "  run-once     Run one ingestion pass"
 	@echo "  run          Run daemon in watch mode"
+	@echo "  source-test  Test one source (set SOURCE=imessage)"
 	@echo "  clean        Remove local build/cache artifacts"
 
 setup-venv:
@@ -60,6 +61,10 @@ run-once:
 
 run:
 	$(PYTHON) amnesia_daemon.py --config config.yaml
+
+source-test:
+	@if [ -z "$(SOURCE)" ]; then echo "Set SOURCE=<name>, e.g. SOURCE=imessage"; exit 1; fi
+	$(PYTHON) scripts/test_source.py --config config.yaml --source $(SOURCE)
 
 clean:
 	rm -rf build dist .pytest_cache .ruff_cache .mypy_cache __pycache__

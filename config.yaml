@@ -14,6 +14,17 @@ sources:
     path: ./ingest/terminal
     pattern: "*.log"
 
+  - name: imessage
+    enabled: true
+    path: ./ingest/imessage
+    pattern: "*.jsonl"
+    options:
+      mode: sqlite # sqlite | jsonl
+      db_path: ~/Library/Messages/chat.db
+      limit: 500
+    include_contains: []
+    exclude_contains: []
+
 store:
   backend: sqlite # sqlite | memory
   dsn: sqlite:///./data/amnesia.db
