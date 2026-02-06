@@ -78,6 +78,7 @@ def setup_logging(level: int | str | None = None, *, force: bool = False) -> Non
         "matplotlib",
         "matplotlib.font_manager",
         "fontTools",
+        "asyncio",
     ):
         logging.getLogger(name).setLevel(logging.WARNING)
     for name in ("LiteLLM", "litellm", "matplotlib", "matplotlib.font_manager", "fontTools"):

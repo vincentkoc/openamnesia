@@ -58,10 +58,11 @@ def enrich_clusters(
         summary = _heuristic_summary(payload)
         llm_attempted = False
         llm_succeeded = False
+        llm_error: str | None = None
         if provider is not None and exemplar_texts:
             llm_attempted = True
             provider_name = f"litellm:{cfg.model}"
-            summary, llm_succeeded = _llm_summary(
+            summary, llm_succeeded, llm_error = _llm_summary(
                 provider,
                 payload,
                 fallback=summary,
@@ -84,6 +85,7 @@ def enrich_clusters(
                     **payload,
                     "llm_attempted": llm_attempted,
                     "llm_succeeded": llm_succeeded,
+                    "llm_error": llm_error,
                 },
             )
         )
@@ -95,6 +97,7 @@ def enrich_clusters(
                     "provider": provider_name,
                     "llm_attempted": llm_attempted,
                     "llm_succeeded": llm_succeeded,
+                    "llm_error": llm_error,
                 }
             )
     return enrichments
@@ -118,7 +121,7 @@ def _llm_summary(
     fallback: str,
     max_tokens: int,
     timeout_seconds: int,
-) -> tuple[str, bool]:
+) -> tuple[str, bool, str | None]:
     system = (
         "You summarize telemetry clusters. Return one concise sentence describing "
         "shared intent/outcome/friction."
@@ -131,8 +134,8 @@ def _llm_summary(
             max_tokens=max_tokens,
             timeout=timeout_seconds,
         )
-    except Exception:
-        return fallback, False
+    except Exception as exc:
+        return fallback, False, str(exc)
     if response:
-        return response, True
-    return fallback, False
+        return response, True, None
+    return fallback, False, "empty_response"
