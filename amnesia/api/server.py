@@ -13,7 +13,9 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-DB_PATH = os.environ.get("AMNESIA_DB", str(Path("./data/amnesia.db").resolve()))
+# Resolve DB path relative to the project root (two levels up from this file)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+DB_PATH = os.environ.get("AMNESIA_DB", str(_PROJECT_ROOT / "data" / "amnesia.db"))
 
 _conn: sqlite3.Connection | None = None
 
