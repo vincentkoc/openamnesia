@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openamnesia"
+version = "0.1.0"
+description = "Local-first memory intake and skill extraction service"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "PyYAML>=6.0",
+]
+
+[project.scripts]
+amnesia-daemon = "amnesia_daemon:main"
+
+[tool.setuptools]
+packages = ["amnesia", "amnesia.connectors", "amnesia.pipeline", "amnesia.store", "amnesia.exports"]
