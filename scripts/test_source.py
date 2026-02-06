@@ -240,10 +240,7 @@ def main() -> int:
         dbg("hook_emit", topic="source.test.error", error=str(exc))
         request_attempted = False
         request_success = False
-        if (
-            args.source == "imessage"
-            and AUTO_REQUEST_DISK_ACCESS_ON_PERMISSION_ERROR
-        ):
+        if args.source == "imessage" and AUTO_REQUEST_DISK_ACCESS_ON_PERMISSION_ERROR:
             request_attempted = True
             request_success = open_full_disk_access_settings()
 
@@ -424,9 +421,7 @@ def _time_range(records) -> dict[str, Any]:
     }
 
 
-def _build_group_rows(
-    records, *, include_filtered_groups: bool = False
-) -> list[dict[str, Any]]:
+def _build_group_rows(records, *, include_filtered_groups: bool = False) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
     for rec in records:
         group = str(rec.group_hint or rec.session_hint or "unknown_group")
@@ -556,8 +551,6 @@ def _active_filters(source_cfg: SourceConfig) -> list[str]:
     if source_cfg.until_ts:
         lines.append(f"until={source_cfg.until_ts}")
     return lines
-
-
 
 
 if __name__ == "__main__":
