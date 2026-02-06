@@ -1,18 +1,35 @@
 sources:
-  - name: cursor
-    enabled: true
-    path: ./ingest/cursor
-    pattern: "*.jsonl"
-
   - name: codex
     enabled: true
-    path: ./ingest/codex
+    path: ~/.codex
     pattern: "*.jsonl"
+    options:
+      use_connector: true
+      include_globs:
+        - "history.jsonl"
+        - "sessions/**/*.jsonl"
 
-  - name: terminal
+  - name: claude
     enabled: true
-    path: ./ingest/terminal
-    pattern: "*.log"
+    path: ~/.claude
+    pattern: "*.jsonl"
+    options:
+      use_connector: true
+      include_globs:
+        - "history.jsonl"
+        - "projects/**/*.jsonl"
+      exclude_globs:
+        - "**/subagents/*.jsonl"
+
+  # - name: cursor
+  #   enabled: true
+  #   path: ./ingest/cursor
+  #   pattern: "*.jsonl"
+
+  # - name: terminal
+  #   enabled: true
+  #   path: ./ingest/terminal
+  #   pattern: "*.log"
 
   - name: imessage
     enabled: true
@@ -24,6 +41,12 @@ sources:
       limit: 500
     include_contains: []
     exclude_contains: []
+    include_groups: []
+    exclude_groups: []
+    include_actors: []
+    exclude_actors: []
+    since_ts:
+    until_ts:
 
 store:
   backend: sqlite # sqlite | memory
@@ -37,6 +60,21 @@ exports:
   enabled: true
   daily_dir: ./exports/daily
   skills_dir: ./exports/skills
+  memory:
+    enabled: true
+    mode: openclawd
+    output_dir: ./exports/memory
+    formats: ["md"]
+    daily: true
+    weekly: true
+    monthly: true
+    per_project: true
 
 hooks:
   plugins: []
+
+e2e:
+  mode: recent
+  since_days: 30
+  discovery_limit: 500
+  log_level: INFO
