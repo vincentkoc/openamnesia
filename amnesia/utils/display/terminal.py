@@ -166,6 +166,9 @@ def print_source_statuses(statuses: list[SourceStatus], configured: list[str]) -
 def print_banner() -> None:
     if os.getenv("AMNESIA_NO_BANNER", "").strip().lower() in {"1", "true", "yes"}:
         return
+    if os.getenv("AMNESIA_BANNER_PRINTED", "").strip().lower() in {"1", "true", "yes"}:
+        return
+    os.environ["AMNESIA_BANNER_PRINTED"] = "1"
     if _HAS_RICH:
         console = Console()
         console.print(f"[bold cyan]{ASCII_BANNER}[/bold cyan]", no_wrap=True, overflow="ignore")
