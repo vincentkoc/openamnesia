@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
   "PyYAML>=6.0",
   "rich>=13.0.0",
+  "tqdm>=4.66.0",
 ]
 
 [project.optional-dependencies]
@@ -19,6 +20,9 @@ dev = [
   "ruff>=0.14.0",
   "pre-commit>=3.8.0",
   "mypy>=1.11.0",
+]
+llm = [
+  "litellm>=1.59.0",
 ]
 
 [project.scripts]
