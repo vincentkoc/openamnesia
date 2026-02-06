@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from amnesia.models import Event, IngestAudit, Moment, Session, SourceStatus
+from amnesia.models import (
+    EntityMention,
+    EntityRollup,
+    Event,
+    IngestAudit,
+    Moment,
+    Session,
+    SourceStatus,
+)
 
 
 @dataclass(slots=True)
@@ -13,6 +21,8 @@ class InMemoryStore:
     skills: dict[str, dict] = field(default_factory=dict)
     source_status: dict[str, SourceStatus] = field(default_factory=dict)
     audits: list[IngestAudit] = field(default_factory=list)
+    entity_mentions: dict[str, EntityMention] = field(default_factory=dict)
+    entity_rollups: dict[str, EntityRollup] = field(default_factory=dict)
 
     def init_schema(self) -> None:
         return
@@ -58,6 +68,22 @@ class InMemoryStore:
 
     def append_ingest_audit(self, audit: IngestAudit) -> None:
         self.audits.append(audit)
+
+    def save_entity_mentions(self, mentions: list[EntityMention]) -> int:
+        inserted = 0
+        for mention in mentions:
+            if mention.mention_id not in self.entity_mentions:
+                self.entity_mentions[mention.mention_id] = mention
+                inserted += 1
+        return inserted
+
+    def save_entity_rollups(self, rollups: list[EntityRollup]) -> int:
+        inserted = 0
+        for rollup in rollups:
+            if rollup.rollup_id not in self.entity_rollups:
+                self.entity_rollups[rollup.rollup_id] = rollup
+                inserted += 1
+        return inserted
 
     def close(self) -> None:
         return

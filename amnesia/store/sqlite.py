@@ -6,7 +6,16 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from amnesia.models import Event, IngestAudit, Moment, Session, SourceStatus, utc_now
+from amnesia.models import (
+    EntityMention,
+    EntityRollup,
+    Event,
+    IngestAudit,
+    Moment,
+    Session,
+    SourceStatus,
+    utc_now,
+)
 
 
 class SQLiteStore:
@@ -15,6 +24,10 @@ class SQLiteStore:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
+        self.conn.execute("PRAGMA temp_store=MEMORY")
+        self.conn.execute("PRAGMA foreign_keys=OFF")
 
     def init_schema(self) -> None:
         schema_path = Path(__file__).with_name("schema.sql")
@@ -23,15 +36,17 @@ class SQLiteStore:
         self.conn.commit()
 
     def save_events(self, events: list[Event]) -> int:
-        inserted = 0
-        for event in events:
-            cur = self.conn.execute(
-                """
-                INSERT OR IGNORE INTO events (
-                    event_id, ts, source, session_id, turn_index, actor, content,
-                    tool_name, tool_status, tool_args_json, tool_result_json, meta_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+        if not events:
+            return 0
+        before = self.conn.total_changes
+        self.conn.executemany(
+            """
+            INSERT OR IGNORE INTO events (
+                event_id, ts, source, session_id, turn_index, actor, content,
+                tool_name, tool_status, tool_args_json, tool_result_json, meta_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
                 (
                     event.event_id,
                     event.ts.astimezone(UTC).isoformat(),
@@ -45,21 +60,24 @@ class SQLiteStore:
                     to_json(event.tool_args_json),
                     to_json(event.tool_result_json),
                     to_json(event.meta_json),
-                ),
-            )
-            inserted += cur.rowcount
+                )
+                for event in events
+            ],
+        )
         self.conn.commit()
-        return inserted
+        return self.conn.total_changes - before
 
     def save_sessions(self, sessions: list[Session]) -> int:
-        inserted = 0
-        for session in sessions:
-            cur = self.conn.execute(
-                """
-                INSERT OR IGNORE INTO sessions (
-                    session_key, session_id, source, start_ts, end_ts, summary, meta_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
+        if not sessions:
+            return 0
+        before = self.conn.total_changes
+        self.conn.executemany(
+            """
+            INSERT OR IGNORE INTO sessions (
+                session_key, session_id, source, start_ts, end_ts, summary, meta_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
                 (
                     session.session_key,
                     session.session_id,
@@ -68,22 +86,25 @@ class SQLiteStore:
                     session.end_ts.isoformat(),
                     session.summary,
                     to_json(session.meta_json),
-                ),
-            )
-            inserted += cur.rowcount
+                )
+                for session in sessions
+            ],
+        )
         self.conn.commit()
-        return inserted
+        return self.conn.total_changes - before
 
     def save_moments(self, moments: list[Moment]) -> int:
-        inserted = 0
-        for moment in moments:
-            cur = self.conn.execute(
-                """
-                INSERT OR IGNORE INTO moments (
-                    moment_id, session_key, start_turn, end_turn, intent, outcome,
-                    friction_score, summary, evidence_json, artifacts_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+        if not moments:
+            return 0
+        before = self.conn.total_changes
+        self.conn.executemany(
+            """
+            INSERT OR IGNORE INTO moments (
+                moment_id, session_key, start_turn, end_turn, intent, outcome,
+                friction_score, summary, evidence_json, artifacts_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
                 (
                     moment.moment_id,
                     moment.session_key,
@@ -95,11 +116,12 @@ class SQLiteStore:
                     moment.summary,
                     to_json(moment.evidence_json),
                     to_json(moment.artifacts_json),
-                ),
-            )
-            inserted += cur.rowcount
+                )
+                for moment in moments
+            ],
+        )
         self.conn.commit()
-        return inserted
+        return self.conn.total_changes - before
 
     def save_skill_candidates(self, skills: list[dict]) -> int:
         inserted = 0
@@ -202,6 +224,61 @@ class SQLiteStore:
             ),
         )
         self.conn.commit()
+
+    def save_entity_mentions(self, mentions: list[EntityMention]) -> int:
+        if not mentions:
+            return 0
+        before = self.conn.total_changes
+        self.conn.executemany(
+            """
+            INSERT OR IGNORE INTO entity_mentions (
+                mention_id, event_id, ts, source, entity_type, entity_value, confidence, meta_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    mention.mention_id,
+                    mention.event_id,
+                    mention.ts.astimezone(UTC).isoformat(),
+                    mention.source,
+                    mention.entity_type,
+                    mention.entity_value,
+                    mention.confidence,
+                    to_json(mention.meta_json),
+                )
+                for mention in mentions
+            ],
+        )
+        self.conn.commit()
+        return self.conn.total_changes - before
+
+    def save_entity_rollups(self, rollups: list[EntityRollup]) -> int:
+        if not rollups:
+            return 0
+        before = self.conn.total_changes
+        self.conn.executemany(
+            """
+            INSERT OR REPLACE INTO entity_rollups (
+                rollup_id, bucket_start_ts, bucket_granularity, source, entity_type,
+                entity_value, mention_count, meta_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    rollup.rollup_id,
+                    rollup.bucket_start_ts.astimezone(UTC).isoformat(),
+                    rollup.bucket_granularity,
+                    rollup.source,
+                    rollup.entity_type,
+                    rollup.entity_value,
+                    rollup.mention_count,
+                    to_json(rollup.meta_json),
+                )
+                for rollup in rollups
+            ],
+        )
+        self.conn.commit()
+        return self.conn.total_changes - before
 
     def close(self) -> None:
         self.conn.close()

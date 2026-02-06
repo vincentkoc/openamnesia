@@ -97,3 +97,33 @@ CREATE TABLE IF NOT EXISTS ingest_audit (
   skill_count INTEGER NOT NULL,
   details_json TEXT
 );
+
+CREATE TABLE IF NOT EXISTS entity_mentions (
+  mention_id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  ts TEXT NOT NULL,
+  source TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_value TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  meta_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS entity_rollups (
+  rollup_id TEXT PRIMARY KEY,
+  bucket_start_ts TEXT NOT NULL,
+  bucket_granularity TEXT NOT NULL,
+  source TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_value TEXT NOT NULL,
+  mention_count INTEGER NOT NULL,
+  meta_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_source_ts ON events(source, ts);
+CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
+CREATE INDEX IF NOT EXISTS idx_events_actor_ts ON events(actor, ts);
+CREATE INDEX IF NOT EXISTS idx_moments_session ON moments(session_key);
+CREATE INDEX IF NOT EXISTS idx_mentions_source_ts ON entity_mentions(source, ts);
+CREATE INDEX IF NOT EXISTS idx_mentions_type_value ON entity_mentions(entity_type, entity_value);
+CREATE INDEX IF NOT EXISTS idx_rollups_bucket ON entity_rollups(bucket_granularity, bucket_start_ts);

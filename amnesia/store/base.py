@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from amnesia.models import Event, IngestAudit, Moment, Session, SourceStatus
+from amnesia.models import (
+    EntityMention,
+    EntityRollup,
+    Event,
+    IngestAudit,
+    Moment,
+    Session,
+    SourceStatus,
+)
 
 
 class Store(Protocol):
@@ -21,5 +29,9 @@ class Store(Protocol):
     def list_source_status(self) -> list[SourceStatus]: ...
 
     def append_ingest_audit(self, audit: IngestAudit) -> None: ...
+
+    def save_entity_mentions(self, mentions: list[EntityMention]) -> int: ...
+
+    def save_entity_rollups(self, rollups: list[EntityRollup]) -> int: ...
 
     def close(self) -> None: ...
