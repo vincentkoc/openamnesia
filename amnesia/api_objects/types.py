@@ -8,6 +8,58 @@ from typing import Any
 
 
 @dataclass(slots=True)
+class SourceState:
+    """Connector state persisted per source between ingestion polls."""
+
+    values: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return dict(self.values)
+
+
+@dataclass(slots=True)
+class SourceStats:
+    """Per-poll source counters used by connectors and run summaries."""
+
+    items_seen: int = 0
+    groups_seen: int = 0
+    item_counts_by_group: dict[str, int] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class SourcePollStartedEvent:
+    source: str
+    state_keys: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class SourcePollCompletedEvent:
+    source: str
+    items_seen: int
+    items_ingested: int
+    items_filtered: int
+    groups_seen: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class SourcePollErrorEvent:
+    source: str
+    error: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class SourceIngestionSummary:
     source: str
     status: str
