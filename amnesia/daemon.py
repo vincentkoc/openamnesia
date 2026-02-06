@@ -31,6 +31,11 @@ from amnesia.filters import (
     parse_iso_ts,
 )
 from amnesia.internal.events import EventBus, InternalEvent
+from amnesia.internal.source_events import (
+    emit_source_poll_completed,
+    emit_source_poll_error,
+    emit_source_poll_started,
+)
 from amnesia.models import IngestAudit, SourceStatus, utc_now
 from amnesia.pipeline.base import PipelineContext
 from amnesia.pipeline.extract import annotate_moments
@@ -143,7 +148,11 @@ class Daemon:
                 source_name = connector.source_name
                 source_state = self.state.per_source.get(source_name, {})
                 now = utc_now()
-                self.event_bus.emit("source.poll.started", source=source_name)
+                emit_source_poll_started(
+                    self.event_bus,
+                    source=source_name,
+                    state_keys=len(source_state),
+                )
 
                 try:
                     poll_result = connector.poll(source_state)
@@ -158,8 +167,8 @@ class Daemon:
                     ingested = len(filtered_records)
                     total_records += ingested
 
-                    self.event_bus.emit(
-                        "source.poll.completed",
+                    emit_source_poll_completed(
+                        self.event_bus,
                         source=source_name,
                         items_seen=seen,
                         items_ingested=ingested,
@@ -230,7 +239,7 @@ class Daemon:
                             error_message=str(exc),
                         )
                     )
-                    self.event_bus.emit("source.poll.error", source=source_name, error=str(exc))
+                    emit_source_poll_error(self.event_bus, source=source_name, error=str(exc))
                     self.logger.exception("Connector failure for source=%s", source_name)
 
             save_state(self.state_path, self.state)

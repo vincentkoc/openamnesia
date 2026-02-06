@@ -70,3 +70,27 @@ class IngestAudit:
     moment_count: int
     skill_count: int
     details_json: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class EntityMention:
+    mention_id: str
+    event_id: str
+    ts: datetime
+    source: str
+    entity_type: str
+    entity_value: str
+    confidence: float
+    meta_json: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class EntityRollup:
+    rollup_id: str
+    bucket_start_ts: datetime
+    bucket_granularity: str
+    source: str
+    entity_type: str
+    entity_value: str
+    mention_count: int
+    meta_json: dict[str, Any] = field(default_factory=dict)
