@@ -205,3 +205,10 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# OpenAmnesia runtime artifacts
+.venv/
+__pycache__/
+*.pyc
+.amnesia_state.yaml
+data/
