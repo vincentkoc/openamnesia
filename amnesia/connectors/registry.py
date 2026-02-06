@@ -5,6 +5,7 @@ from pathlib import Path
 
 from amnesia.config import SourceConfig
 from amnesia.connectors.base import ConnectorSettings, SourceConnector
+from amnesia.connectors.claude import ClaudeConnector
 from amnesia.connectors.codex import CodexConnector
 from amnesia.connectors.cursor import CursorConnector
 from amnesia.connectors.file_drop import FileDropConnector
@@ -15,6 +16,7 @@ from amnesia.sources.registry import validate_source_module_structure
 
 def _connector_from_source_name(source_name: str):
     builtins: dict[str, type] = {
+        "claude": ClaudeConnector,
         "cursor": CursorConnector,
         "codex": CodexConnector,
         "terminal": TerminalConnector,
@@ -43,7 +45,7 @@ def build_connectors(sources: list[SourceConfig]) -> list[SourceConnector]:
 
         settings = ConnectorSettings(
             source_name=source.name,
-            root_path=Path(source.path),
+            root_path=Path(source.path).expanduser(),
             pattern=source.pattern,
             options=source.options,
         )

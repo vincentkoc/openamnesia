@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import fnmatch
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -36,7 +37,7 @@ class FileDropConnector:
                 stats=SourceStats(),
             )
 
-        for file_path in sorted(root.glob(self.settings.pattern)):
+        for file_path in self._iter_files(root):
             if not file_path.is_file():
                 continue
 
@@ -64,6 +65,35 @@ class FileDropConnector:
             item_counts_by_group=dict(group_counter),
         )
         return SourcePollResult.from_contracts(records=records, state=new_state, stats=stats)
+
+    def _iter_files(self, root: Path) -> list[Path]:
+        include_globs = self.settings.options.get("include_globs")
+        exclude_globs = self.settings.options.get("exclude_globs") or []
+        include_list: list[str] = []
+        if isinstance(include_globs, (list, tuple)):
+            include_list = [str(item) for item in include_globs if str(item).strip()]
+        paths: list[Path] = []
+        if include_list:
+            for pattern in include_list:
+                paths.extend(root.glob(pattern))
+        else:
+            paths.extend(root.glob(self.settings.pattern))
+
+        excluded: list[Path] = []
+        for path in paths:
+            if not exclude_globs:
+                excluded.append(path)
+                continue
+            try:
+                rel = path.relative_to(root).as_posix()
+            except ValueError:
+                rel = str(path)
+            if any(fnmatch.fnmatch(rel, str(pattern)) for pattern in exclude_globs):
+                continue
+            excluded.append(path)
+
+        unique = sorted({path.resolve() for path in excluded})
+        return unique
 
     def _parse_line(self, file_path: Path, line_number: int, line: str) -> SourceRecord | None:
         if not line.strip():
