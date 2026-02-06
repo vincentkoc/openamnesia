@@ -15,7 +15,7 @@ from rich.table import Table
 from amnesia import __version__
 from amnesia.config import SourceConfig, load_config
 from amnesia.connectors.registry import build_connectors
-from amnesia.constants import AUTO_REQUEST_DISK_ACCESS_ON_PERMISSION_ERROR
+from amnesia.constants import AUTO_REQUEST_DISK_ACCESS_ON_PERMISSION_ERROR, SOURCE_TEST_DEBUG
 from amnesia.filters import (
     SourceFilterPipeline,
     make_exclude_actors_filter,
@@ -127,6 +127,7 @@ def main() -> int:
     console = Console()
     if not args.json:
         print_banner()
+        console.print(f"[bold]OpenAmnesia[/bold] 🧠  [dim]v{__version__}[/dim]")
     cfg = load_config(args.config)
 
     source_cfg = next((src for src in cfg.sources if src.name == args.source and src.enabled), None)
@@ -157,28 +158,17 @@ def main() -> int:
 
     if not args.json:
         mode = str(source_cfg.options.get("mode", "default"))
-        console.print(
-            Panel(
-                "\n".join(
-                    [
-                        f"version={__version__}",
-                        f"source={args.source}",
-                        f"config={args.config}",
-                        f"mode={mode}",
-                        f"reset_state={args.reset_state}",
-                        f"sample={args.sample}",
-                        f"since={source_cfg.since_ts or '-'}",
-                        f"until={source_cfg.until_ts or '-'}",
-                        f"include_groups={source_cfg.include_groups}",
-                        f"exclude_groups={source_cfg.exclude_groups}",
-                        f"include_actors={source_cfg.include_actors}",
-                        f"exclude_actors={source_cfg.exclude_actors}",
-                    ]
-                ),
-                title="Source Test Task",
-                border_style="cyan",
-            )
-        )
+        console.print("[bold cyan]Source Test Task[/bold cyan]")
+        console.print(f"[dim]source:[/dim] {args.source}")
+        console.print(f"[dim]config:[/dim] {args.config}")
+        console.print(f"[dim]mode:[/dim] {mode}")
+        console.print(f"[dim]reset_state:[/dim] {args.reset_state}")
+        console.print(f"[dim]sample:[/dim] {args.sample}")
+        active_filters = _active_filters(source_cfg)
+        if active_filters:
+            console.print("[dim]filters:[/dim]")
+            for line in active_filters:
+                console.print(f"  - {line}")
 
     state_path = Path(args.state_path)
     state_doc = _load_state(state_path)
@@ -285,8 +275,11 @@ def main() -> int:
 
     tr = payload["time_range"]
     if tr["oldest"] is not None:
+        oldest_rel = _relative_time_text(tr["oldest"])
+        newest_rel = _relative_time_text(tr["newest"])
         console.print(
-            f"[dim]Time range:[/dim] oldest={tr['oldest']} newest={tr['newest']} "
+            f"[dim]Time range:[/dim] oldest={oldest_rel} ({tr['oldest']}) "
+            f"newest={newest_rel} ({tr['newest']}) "
             f"(records with timestamps={tr['timestamped_records']})"
         )
     else:
@@ -304,7 +297,7 @@ def main() -> int:
             row["group"],
             str(row["count"]),
             f"{(row['count'] / total):.1%}",
-            row["latest_ts"] or "-",
+            _pretty_ts(row["latest_ts"]),
         )
     console.print(groups_table)
 
@@ -315,12 +308,23 @@ def main() -> int:
     records_table.add_column("Content", overflow="fold")
     for item in payload["sample_records"]:
         records_table.add_row(
-            item["ts"] or "-",
+            _pretty_ts(item["ts"]),
             item["actor"],
             str(item.get("group_hint") or "-"),
-            item["content"],
+            _clip_one_line(item["content"], width=console.size.width),
         )
     console.print(records_table)
+
+    if SOURCE_TEST_DEBUG:
+        debug_table = Table(title="Debug Events", show_header=True, header_style="bold magenta")
+        debug_table.add_column("Topic")
+        debug_table.add_column("Payload", overflow="fold")
+        for event in payload["events"][-10:]:
+            debug_table.add_row(
+                event.get("topic", "-"),
+                json.dumps(event.get("payload", {}), ensure_ascii=True),
+            )
+        console.print(debug_table)
 
     return 0
 
@@ -362,6 +366,69 @@ def _build_group_rows(records) -> list[dict[str, Any]]:
         for group, data in grouped.items()
     ]
     return sorted(rows, key=lambda row: (row["count"], row["latest_ts"] or ""), reverse=True)
+
+
+def _relative_time_text(iso_ts: str | None) -> str:
+    if not iso_ts:
+        return "-"
+    try:
+        dt = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
+    except ValueError:
+        return "-"
+    now = datetime.now(UTC)
+    delta = now - dt.astimezone(UTC)
+    seconds = int(max(0, delta.total_seconds()))
+    if seconds < 60:
+        return f"{seconds}s ago"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m ago"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    days = hours // 24
+    if days < 7:
+        return f"{days}d ago"
+    weeks = days // 7
+    if weeks < 5:
+        return f"{weeks}w ago"
+    months = days // 30
+    return f"{months}mo ago"
+
+
+def _pretty_ts(iso_ts: str | None) -> str:
+    if iso_ts is None:
+        return "-"
+    return _relative_time_text(iso_ts)
+
+
+def _clip_one_line(text: str, width: int) -> str:
+    clean = " ".join(str(text).split())
+    max_chars = max(24, min(160, width // 2))
+    if len(clean) <= max_chars:
+        return clean
+    return clean[: max_chars - 3] + "..."
+
+
+def _active_filters(source_cfg: SourceConfig) -> list[str]:
+    lines: list[str] = []
+    if source_cfg.include_contains:
+        lines.append(f"include_contains={source_cfg.include_contains}")
+    if source_cfg.exclude_contains:
+        lines.append(f"exclude_contains={source_cfg.exclude_contains}")
+    if source_cfg.include_groups:
+        lines.append(f"include_groups={source_cfg.include_groups}")
+    if source_cfg.exclude_groups:
+        lines.append(f"exclude_groups={source_cfg.exclude_groups}")
+    if source_cfg.include_actors:
+        lines.append(f"include_actors={source_cfg.include_actors}")
+    if source_cfg.exclude_actors:
+        lines.append(f"exclude_actors={source_cfg.exclude_actors}")
+    if source_cfg.since_ts:
+        lines.append(f"since={source_cfg.since_ts}")
+    if source_cfg.until_ts:
+        lines.append(f"until={source_cfg.until_ts}")
+    return lines
 
 
 if __name__ == "__main__":

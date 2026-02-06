@@ -15,3 +15,6 @@ STATUS_NEVER_RUN = "never-run"
 
 # When True, iMessage permission failures auto-open macOS Full Disk Access settings.
 AUTO_REQUEST_DISK_ACCESS_ON_PERMISSION_ERROR = True
+
+# Source test UI debug view toggle.
+SOURCE_TEST_DEBUG = True
