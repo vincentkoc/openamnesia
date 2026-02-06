@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -125,10 +126,18 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
     console = Console()
+    debug_trace: list[tuple[str, str]] = []
+
+    def dbg(step: str, detail: str) -> None:
+        if SOURCE_TEST_DEBUG and not args.json:
+            debug_trace.append((step, detail))
+
     if not args.json:
         print_banner()
         console.print(f"[bold]OpenAmnesia[/bold] 🧠  [dim]v{__version__}[/dim]")
+    dbg("boot", f"argv_source={args.source} config={args.config}")
     cfg = load_config(args.config)
+    dbg("config.loaded", f"sources={len(cfg.sources)}")
 
     source_cfg = next((src for src in cfg.sources if src.name == args.source and src.enabled), None)
     if source_cfg is None:
@@ -143,8 +152,13 @@ def main() -> int:
 
     connectors = build_connectors([source_cfg])
     connector = connectors[0]
+    dbg(
+        "connector.ready",
+        f"type={connector.__class__.__name__} root={source_cfg.path} pattern={source_cfg.pattern}",
+    )
     if args.source == "imessage" and "mode" not in source_cfg.options:
         source_cfg.options["mode"] = "sqlite"
+    dbg("source.options", json.dumps(source_cfg.options, ensure_ascii=True, sort_keys=True))
 
     # CLI filters extend config filters for quick experimentation.
     source_cfg.include_groups = [*source_cfg.include_groups, *args.include_group]
@@ -155,6 +169,7 @@ def main() -> int:
         source_cfg.since_ts = args.since
     if args.until:
         source_cfg.until_ts = args.until
+    dbg("filters.active", "; ".join(_active_filters(source_cfg)) or "none")
 
     if not args.json:
         mode = str(source_cfg.options.get("mode", "default"))
@@ -172,9 +187,11 @@ def main() -> int:
 
     state_path = Path(args.state_path)
     state_doc = _load_state(state_path)
+    dbg("state.loaded", f"path={state_path} keys={list(state_doc.keys())}")
     source_state = {}
     if not args.reset_state:
         source_state = state_doc.get("per_source", {}).get(args.source, {})
+    dbg("state.source", json.dumps(source_state, ensure_ascii=True, sort_keys=True))
 
     bus = EventBus()
     recent_events: list[dict[str, Any]] = []
@@ -185,7 +202,16 @@ def main() -> int:
 
     bus.emit("source.test.started", source=args.source)
     try:
+        started_poll = time.perf_counter()
         poll_result = connector.poll(source_state)
+        poll_ms = (time.perf_counter() - started_poll) * 1000.0
+        dbg(
+            "poll.completed",
+            (
+                f"ms={poll_ms:.2f} seen={poll_result.stats.items_seen} "
+                f"groups={poll_result.stats.groups_seen} state_keys={len(poll_result.state)}"
+            ),
+        )
     except Exception as exc:
         bus.emit("source.test.error", source=args.source, error=str(exc))
         request_attempted = False
@@ -212,6 +238,8 @@ def main() -> int:
             print(json.dumps(payload, ensure_ascii=True, indent=2))
             return 2
 
+        dbg("poll.error", str(exc))
+        _render_debug_trace(console, debug_trace)
         console.print(
             Panel(
                 "[bold]Ingestion failed[/bold]\n"
@@ -225,8 +253,13 @@ def main() -> int:
         )
         return 2
     pipeline = _build_filter_pipeline(source_cfg)
+    dbg("filters.pipeline", f"filter_count={len(pipeline.filters)}")
     filtered_records, dropped = pipeline.apply(poll_result.records)
     ordered_records = _order_records(filtered_records, order=args.order)
+    dbg(
+        "filters.result",
+        f"ingested={len(ordered_records)} dropped={dropped} order={args.order}",
+    )
     bus.emit(
         "source.test.completed",
         source=args.source,
@@ -240,6 +273,7 @@ def main() -> int:
         state_doc.setdefault("per_source", {})
         state_doc["per_source"][args.source] = poll_result.state
         _save_state(state_path, state_doc)
+        dbg("state.saved", f"path={state_path}")
 
     payload = {
         "source": args.source,
@@ -325,6 +359,7 @@ def main() -> int:
                 json.dumps(event.get("payload", {}), ensure_ascii=True),
             )
         console.print(debug_table)
+        _render_debug_trace(console, debug_trace)
 
     return 0
 
@@ -429,6 +464,17 @@ def _active_filters(source_cfg: SourceConfig) -> list[str]:
     if source_cfg.until_ts:
         lines.append(f"until={source_cfg.until_ts}")
     return lines
+
+
+def _render_debug_trace(console: Console, trace: list[tuple[str, str]]) -> None:
+    if not trace:
+        return
+    table = Table(title="Debug Trace", show_header=True, header_style="bold yellow")
+    table.add_column("Step")
+    table.add_column("Detail", overflow="fold")
+    for step, detail in trace:
+        table.add_row(step, detail)
+    console.print(table)
 
 
 if __name__ == "__main__":
