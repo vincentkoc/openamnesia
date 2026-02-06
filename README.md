@@ -27,6 +27,8 @@ Local-first ingestion service that converts tool/session exhaust into normalized
 - Source poll stats propagated to summaries (`items`, `groups`, filtered counts)
 - iMessage source connector (`imessage` JSONL export ingestion)
 - Source-by-source test helper (`scripts/test_source.py`)
+- Scalable ingest runner with incremental trawling + spool queue (`scripts/run_ingest.py`)
+- Deterministic people/places/projects extraction with time rollups (no LLM required)
 
 ## Project layout
 - `amnesia_daemon.py`: daemon entrypoint + orchestration
@@ -70,7 +72,22 @@ python scripts/test_source.py --config config.yaml --source imessage
 amnesia-daemon --config config.yaml --once --events-limit 20
 ```
 
-5. Generate default config if needed:
+7. Run high-volume incremental ingest:
+```bash
+python scripts/run_ingest.py --config config.yaml --entity-granularity week
+```
+
+8. Run standalone iMessage SQLite ingest (SDK + local config, no daemon):
+```bash
+python scripts/ingest_imessage_sqlite.py
+```
+
+Initialize/edit the local config template:
+```bash
+python scripts/ingest_imessage_sqlite.py --init-config
+```
+
+9. Generate default config if needed:
 ```bash
 amnesia-daemon --init-config --config config.yaml
 ```
@@ -135,6 +152,23 @@ python scripts/test_source.py --config config.yaml --source imessage \
   - `--json` machine-readable output
   - `--no-save-state` dry-run polling without offset updates
   - `--reset-state` re-read source from the beginning for test runs
+
+## Scale ingest runner
+- `scripts/run_ingest.py` is optimized for big file volumes:
+  - incremental file checkpoints (offset/mtime/inode)
+  - spool segments to decouple reading from processing
+  - deterministic extraction of people/places/projects by time bucket
+- Useful flags:
+  - `--source terminal --source codex`
+  - `--max-records-per-source 500000`
+  - `--entity-granularity day|week|month`
+  - `--state-path .amnesia_trawl_state.yaml`
+  - `--keep-spool` (debug)
+
+Create a new source scaffold fast:
+```bash
+python scripts/new_source.py my_source
+```
 
 ## Source module template (enforced)
 Each source now follows this normalized shape:
