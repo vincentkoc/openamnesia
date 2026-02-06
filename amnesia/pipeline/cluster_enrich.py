@@ -67,12 +67,14 @@ def enrich_clusters(
             if len(exemplar_texts) >= 3:
                 break
 
+        signal_score = _signal_score(cluster.label, exemplar_texts)
         payload = {
             "cluster_id": cluster.cluster_id,
             "label": _compact_example_text(cluster.label)[:64],
             "size": cluster.size,
             "source": cluster.source,
             "examples": exemplar_texts,
+            "signal_score": signal_score,
         }
 
         provider_name = "heuristic"
@@ -80,10 +82,12 @@ def enrich_clusters(
         llm_attempted = False
         llm_succeeded = False
         llm_error: str | None = None
+        llm_path = "heuristic"
+        extracted: dict[str, Any] = {}
         if provider is not None and exemplar_texts and _is_llm_worthy(payload):
             llm_attempted = True
             provider_name = f"litellm:{cfg.model}"
-            summary, llm_succeeded, llm_error = _llm_summary(
+            summary, llm_succeeded, llm_error, llm_path, extracted = _llm_summary(
                 provider,
                 payload,
                 fallback=summary,
@@ -111,6 +115,12 @@ def enrich_clusters(
                     "llm_attempted": llm_attempted,
                     "llm_succeeded": llm_succeeded,
                     "llm_error": llm_error,
+                    "llm_path": llm_path,
+                    "signal_score": signal_score,
+                    "intent": extracted.get("intent"),
+                    "outcome": extracted.get("outcome"),
+                    "friction": extracted.get("friction"),
+                    "confidence": extracted.get("confidence"),
                 },
             )
         )
@@ -123,6 +133,7 @@ def enrich_clusters(
                     "llm_attempted": llm_attempted,
                     "llm_succeeded": llm_succeeded,
                     "llm_error": llm_error,
+                    "llm_path": llm_path,
                 }
             )
     return enrichments
@@ -146,7 +157,7 @@ def _llm_summary(
     fallback: str,
     max_tokens: int,
     timeout_seconds: int,
-) -> tuple[str, bool, str | None]:
+) -> tuple[str, bool, str | None, str, dict[str, Any]]:
     system = (
         "You summarize telemetry clusters. Return strict JSON only with fields: "
         "summary, intent, outcome, friction."
@@ -162,6 +173,7 @@ def _llm_summary(
         intent: str = Field(default="")
         outcome: str = Field(default="")
         friction: str = Field(default="")
+        confidence: float = Field(default=0.65, ge=0.0, le=1.0)
 
     try:
         response: Any = provider.complete_structured(
@@ -187,16 +199,27 @@ def _llm_summary(
                     timeout=timeout_seconds,
                 ).strip()
                 if plain:
-                    return plain, True, None
+                    return plain, True, None, "plain_fallback", {}
             except Exception as plain_exc:
                 error_text = f"{error_text}; plain_fallback={plain_exc}"
         if "Connection error" in error_text or "ConnectError" in error_text:
             error_text = "openai_connection_error: unable to reach provider after retries"
-        return fallback, False, error_text
+        return fallback, False, error_text, "failed", {}
     summary = str(getattr(response, "summary", "")).strip()
     if summary:
-        return summary, True, None
-    return fallback, False, "empty_structured_summary"
+        return (
+            summary,
+            True,
+            None,
+            "structured",
+            {
+                "intent": str(getattr(response, "intent", "")).strip(),
+                "outcome": str(getattr(response, "outcome", "")).strip(),
+                "friction": str(getattr(response, "friction", "")).strip(),
+                "confidence": float(getattr(response, "confidence", 0.65)),
+            },
+        )
+    return fallback, False, "empty_structured_summary", "failed", {}
 
 
 def _compact_example_text(text: str) -> str:
@@ -210,14 +233,15 @@ def _compact_example_text(text: str) -> str:
 
 
 def _is_llm_worthy(payload: dict[str, object]) -> bool:
-    label = str(payload.get("label", ""))
-    examples = payload.get("examples", [])
-    if not isinstance(examples, list):
-        examples = []
-    corpus = " ".join([label, *[str(item) for item in examples]]).strip()
+    return _signal_score(str(payload.get("label", "")), payload.get("examples", [])) >= 0.22
+
+
+def _signal_score(label: str, examples: object) -> float:
+    items = examples if isinstance(examples, list) else []
+    corpus = " ".join([str(label), *[str(item) for item in items]]).strip()
     if not corpus:
-        return False
+        return 0.0
     alpha_count = sum(1 for ch in corpus if ch.isalpha())
     digit_count = sum(1 for ch in corpus if ch.isdigit())
     meaningful = alpha_count + digit_count
-    return meaningful >= 18
+    return min(1.0, meaningful / max(1.0, len(corpus)))
