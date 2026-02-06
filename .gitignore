@@ -216,3 +216,6 @@ data/
 
 # OpenAmnesia runtime exports
 exports/
+*.db-wal
+*.db
+*.db-shm
