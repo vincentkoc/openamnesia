@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from amnesia.models import Event, IngestAudit, Moment, Session, SourceStatus, utc_now
@@ -159,6 +159,28 @@ class SQLiteStore:
             ),
         )
         self.conn.commit()
+
+    def list_source_status(self) -> list[SourceStatus]:
+        rows = self.conn.execute(
+            """
+            SELECT source, status, last_poll_ts, records_seen, records_ingested, error_message
+            FROM source_status
+            ORDER BY source
+            """
+        ).fetchall()
+        statuses: list[SourceStatus] = []
+        for row in rows:
+            statuses.append(
+                SourceStatus(
+                    source=row["source"],
+                    status=row["status"],
+                    last_poll_ts=datetime.fromisoformat(row["last_poll_ts"]),
+                    records_seen=row["records_seen"],
+                    records_ingested=row["records_ingested"],
+                    error_message=row["error_message"],
+                )
+            )
+        return statuses
 
     def append_ingest_audit(self, audit: IngestAudit) -> None:
         self.conn.execute(

@@ -2,70 +2,100 @@
 
 Local-first ingestion service that converts tool/session exhaust into normalized events, sessions, moments, and skill candidates.
 
-## What is implemented (v0 ingestion scaffold)
+## Scope completed for ingestion phase
 - Python daemon service (`amnesia_daemon.py`) with `--once` and watch-loop modes
-- Source connectors with a shared interface
-  - `cursor` (file-drop `.jsonl`)
-  - `codex` (file-drop `.jsonl`)
-  - `terminal` (file-drop `.log`)
-- Hookable pipeline stages
+- Source connectors with shared interface:
+  - `cursor` (`.jsonl` file-drop)
+  - `codex` (`.jsonl` file-drop)
+  - `terminal` (`.log` file-drop)
+- Hookable pipeline stages:
   - normalize -> sessionize -> momentize -> extract -> skill_mine -> optimize
-  - extension hooks available before/after major stages
-- Swappable store backend via config
+- Config-driven plugin loading for hooks (`module.path:function_name`)
+- Swappable store backend via config:
   - `sqlite` (default)
   - `memory` (dev/testing)
-- SQLite schema for raw and derived objects in `amnesia/store/schema.sql`
+- SQLite persistence includes:
+  - core entities: `events`, `sessions`, `moments`, `skills`
+  - operational entities: `source_status`, `ingest_audit`, `exports`
+- Optional exports:
+  - daily notes markdown (`exports/daily/YYYY_MM_DD.md`)
+  - skill YAML files (`exports/skills/*.yaml`)
 
 ## Project layout
-- `amnesia_daemon.py`: daemon entrypoint and orchestration
-- `amnesia/config.py`: typed config loading + default config generation
-- `amnesia/connectors/`: source connectors and connector registry
-- `amnesia/pipeline/`: ingestion pipeline primitives and hook registry
-- `amnesia/store/`: DB abstraction + backend implementations
+- `amnesia_daemon.py`: daemon entrypoint + orchestration
+- `amnesia/config.py`: typed config and defaults
+- `amnesia/connectors/`: source connectors and registry
+- `amnesia/pipeline/`: processing stages, hooks, plugin loader
+- `amnesia/store/`: store interface + sqlite/memory implementations
+- `amnesia/exports/`: markdown and YAML exporters
+- `tests/`: ingestion-focused tests
 
 ## Quick start
 1. Create env and install:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e '.[dev]'
 ```
 
-2. (Optional) write default config:
-```bash
-amnesia-daemon --init-config --config config.yaml
-```
-
-3. Run one pass:
+2. Run one ingestion pass:
 ```bash
 amnesia-daemon --config config.yaml --once
 ```
 
-4. Run in watch mode:
+3. Run continuous watch mode:
 ```bash
 amnesia-daemon --config config.yaml
 ```
 
-Default SQLite file path in `config.yaml`: `./data/amnesia.db`
+4. Generate default config if needed:
+```bash
+amnesia-daemon --init-config --config config.yaml
+```
 
-## Config snippet
+## Config
 ```yaml
 store:
-  backend: sqlite   # or memory
+  backend: sqlite   # sqlite | memory
   dsn: sqlite:///./data/amnesia.db
 
 daemon:
   poll_interval_seconds: 5
   state_path: ./.amnesia_state.yaml
+
+exports:
+  enabled: true
+  daily_dir: ./exports/daily
+  skills_dir: ./exports/skills
+
+hooks:
+  plugins: []
 ```
 
-## Hooking pipeline stages
-`Daemon` exposes `self.hooks` (`HookRegistry`). Each hook receives and returns `PipelineContext`:
-- `pre_normalize`
-- `post_normalize`
-- `post_sessionize`
-- `post_momentize`
-- `post_extract`
-- `post_skill_mine`
+## Hook plugins
+Each plugin path must resolve to a function that receives `HookRegistry` and registers hooks.
 
-This gives you clean extension points for redaction, enrichment, custom segmentation, and skill promotion logic.
+Example config:
+```yaml
+hooks:
+  plugins:
+    - my_project.amnesia_plugins:register_hooks
+```
+
+Example plugin:
+```python
+from amnesia.pipeline.hooks import HookRegistry
+
+def register_hooks(registry: HookRegistry) -> None:
+    def redact(ctx):
+        for event in ctx.events:
+            event.content = event.content.replace("SECRET", "[REDACTED]")
+        return ctx
+
+    registry.post_normalize.append(redact)
+```
+
+## Validate
+```bash
+pytest -q
+```

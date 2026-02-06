@@ -24,6 +24,9 @@ class Store(Protocol):
     def save_source_status(self, status: SourceStatus) -> None:
         ...
 
+    def list_source_status(self) -> list[SourceStatus]:
+        ...
+
     def append_ingest_audit(self, audit: IngestAudit) -> None:
         ...
 

@@ -53,6 +53,9 @@ class InMemoryStore:
     def save_source_status(self, status: SourceStatus) -> None:
         self.source_status[status.source] = status
 
+    def list_source_status(self) -> list[SourceStatus]:
+        return sorted(self.source_status.values(), key=lambda item: item.source)
+
     def append_ingest_audit(self, audit: IngestAudit) -> None:
         self.audits.append(audit)
 
