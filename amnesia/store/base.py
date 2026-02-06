@@ -1,0 +1,31 @@
+from __future__ import annotations
+
+from typing import Protocol
+
+from amnesia.models import Event, IngestAudit, Moment, Session, SourceStatus
+
+
+class Store(Protocol):
+    def init_schema(self) -> None:
+        ...
+
+    def save_events(self, events: list[Event]) -> int:
+        ...
+
+    def save_sessions(self, sessions: list[Session]) -> int:
+        ...
+
+    def save_moments(self, moments: list[Moment]) -> int:
+        ...
+
+    def save_skill_candidates(self, skills: list[dict]) -> int:
+        ...
+
+    def save_source_status(self, status: SourceStatus) -> None:
+        ...
+
+    def append_ingest_audit(self, audit: IngestAudit) -> None:
+        ...
+
+    def close(self) -> None:
+        ...
