@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { cn, frictionLabel, frictionColor, frictionDotColor, formatDateTime } from "../../lib/utils";
+import { cn, frictionLabel, frictionColor, formatDateTime } from "../../lib/utils";
 import { SourceBadge } from "../common/SourceBadge";
-import { Badge } from "../common/Badge";
 import { EventRow } from "./EventRow";
 
 interface Props {
@@ -17,17 +16,17 @@ export function MomentPanel({ momentId, onClose }: Props) {
   });
 
   return (
-    <div className="anim-slide-in flex h-full w-[520px] shrink-0 flex-col border-l border-line/50 bg-void-0"
+    <div className="anim-slide-in flex h-full w-[560px] shrink-0 flex-col border-l border-line/50 bg-void-0"
       style={{ boxShadow: "var(--panel-shadow)" }}
     >
       {/* Panel header */}
       <div className="flex shrink-0 items-center justify-between border-b border-line/30 px-4 py-2.5">
-        <span className="text-[9px] uppercase tracking-[0.2em] text-text-3">
+        <span className="font-sans text-[9px] font-semibold uppercase tracking-[0.2em] text-text-3">
           moment detail
         </span>
         <button
           onClick={onClose}
-          className="rounded px-2 py-0.5 text-[10px] text-text-3 transition-colors hover:bg-void-2 hover:text-text-0"
+          className="rounded px-2 py-0.5 font-sans text-[10px] text-text-3 transition-colors hover:bg-void-2 hover:text-text-0"
         >
           &times; close
         </button>
@@ -43,73 +42,68 @@ export function MomentPanel({ momentId, onClose }: Props) {
 
         {moment && (
           <div className="anim-fade-in">
-            {/* Diff-style header */}
-            <div className="flex items-center gap-2 bg-accent-dim/30 px-4 py-2 text-[9px]">
-              <span className="font-bold text-accent">@@</span>
+            {/* Stats strip */}
+            <div className="flex flex-wrap items-center gap-4 border-b border-line/30 bg-void-1/50 px-4 py-2.5">
+              <div className="stat-pip">
+                <span className="stat-value">{moment.end_turn - moment.start_turn + 1}</span>
+                <span className="stat-label">turns</span>
+              </div>
+              <div className="stat-pip">
+                <span className="stat-value">{moment.end_turn - moment.start_turn + 1}</span>
+                <span className="stat-label">steps</span>
+              </div>
+              <div className="stat-pip">
+                <span className={cn("stat-value", frictionColor(moment.friction_score))}>
+                  {frictionLabel(moment.friction_score)}
+                </span>
+                <span className="stat-label">friction</span>
+              </div>
               {moment.source && <SourceBadge source={moment.source} />}
               {moment.session_start_ts && (
-                <span className="tabular-nums text-text-3">
+                <span className="font-mono text-[10px] tabular-nums text-text-3">
                   {formatDateTime(moment.session_start_ts)}
                 </span>
               )}
-              <span
-                className={cn(
-                  "flex items-center gap-1.5 font-semibold uppercase tracking-[0.15em]",
-                  frictionColor(moment.friction_score),
-                )}
-              >
-                <span
-                  className={cn(
-                    "h-1.5 w-1.5 rounded-full",
-                    frictionDotColor(moment.friction_score),
-                  )}
-                />
-                {frictionLabel(moment.friction_score)}
+              <span className="font-mono text-[10px] tabular-nums text-accent">
+                {moment.session_key}
               </span>
-              <span className="font-bold text-accent">@@</span>
             </div>
 
-            {/* Intent / Summary / Outcome */}
-            <div className="border-b border-line/20 px-4 py-4">
-              {moment.intent && (
-                <div className="flex gap-2">
-                  <span className="w-3 shrink-0 text-right font-bold text-ok">+</span>
-                  <span className="text-[14px] font-bold text-text-0">
-                    {moment.intent}
-                  </span>
+            {/* Intent */}
+            {moment.intent && (
+              <div className="border-b border-line/20 px-4 py-3">
+                <div className="mb-1 font-sans text-[9px] font-semibold uppercase tracking-[0.15em] text-text-3">
+                  Intent
                 </div>
-              )}
-
-              {moment.summary && (
-                <div className="mt-2 flex gap-2">
-                  <span className="w-3 shrink-0 text-right text-text-3">&nbsp;</span>
-                  <span className="text-[11px] leading-relaxed text-text-2">
-                    {moment.summary}
-                  </span>
+                <div className="font-mono text-[13px] font-medium text-text-0">
+                  {moment.intent}
                 </div>
-              )}
+              </div>
+            )}
 
-              {moment.outcome && (
-                <div className="mt-2 flex gap-2">
-                  <span className="w-3 shrink-0 text-right font-bold text-ok">+</span>
-                  <span className="text-[11px] text-ok/80">
-                    {moment.outcome}
-                  </span>
+            {/* Summary */}
+            {moment.summary && (
+              <div className="border-b border-line/20 px-4 py-3">
+                <div className="mb-1 font-sans text-[9px] font-semibold uppercase tracking-[0.15em] text-text-3">
+                  Summary
                 </div>
-              )}
-            </div>
+                <div className="font-mono text-[11px] leading-relaxed text-text-2">
+                  {moment.summary}
+                </div>
+              </div>
+            )}
 
-            {/* Meta strip */}
-            <div className="flex items-center gap-3 border-b border-line/20 px-4 py-2 text-[9px]">
-              <span className="tabular-nums text-text-3">
-                turns {moment.start_turn}&ndash;{moment.end_turn}
-              </span>
-              <span className="text-line">&middot;</span>
-              <span className="tabular-nums text-text-3">
-                {moment.end_turn - moment.start_turn + 1} steps
-              </span>
-              <Badge variant="accent">{moment.session_key}</Badge>
-            </div>
+            {/* Outcome */}
+            {moment.outcome && (
+              <div className="border-b border-line/20 px-4 py-3">
+                <div className="mb-1 font-sans text-[9px] font-semibold uppercase tracking-[0.15em] text-text-3">
+                  Outcome
+                </div>
+                <div className="font-mono text-[11px] text-ok/80">
+                  {moment.outcome}
+                </div>
+              </div>
+            )}
 
             {/* Evidence & Artifacts */}
             {(Object.keys(moment.evidence_json || {}).length > 0 ||
@@ -119,10 +113,10 @@ export function MomentPanel({ momentId, onClose }: Props) {
                   {moment.evidence_json &&
                     Object.keys(moment.evidence_json).length > 0 && (
                       <div className="rounded border border-line/30 bg-void-1 p-3">
-                        <div className="mb-1.5 text-[8px] font-semibold uppercase tracking-[0.2em] text-text-3">
+                        <div className="mb-1.5 font-sans text-[8px] font-semibold uppercase tracking-[0.2em] text-text-3">
                           evidence
                         </div>
-                        <pre className="overflow-x-auto text-[9px] leading-relaxed text-text-2">
+                        <pre className="overflow-x-auto font-mono text-[9px] leading-relaxed text-text-2">
                           {JSON.stringify(moment.evidence_json, null, 2)}
                         </pre>
                       </div>
@@ -130,10 +124,10 @@ export function MomentPanel({ momentId, onClose }: Props) {
                   {moment.artifacts_json &&
                     Object.keys(moment.artifacts_json).length > 0 && (
                       <div className="rounded border border-line/30 bg-void-1 p-3">
-                        <div className="mb-1.5 text-[8px] font-semibold uppercase tracking-[0.2em] text-text-3">
+                        <div className="mb-1.5 font-sans text-[8px] font-semibold uppercase tracking-[0.2em] text-text-3">
                           artifacts
                         </div>
-                        <pre className="overflow-x-auto text-[9px] leading-relaxed text-text-2">
+                        <pre className="overflow-x-auto font-mono text-[9px] leading-relaxed text-text-2">
                           {JSON.stringify(moment.artifacts_json, null, 2)}
                         </pre>
                       </div>
@@ -146,7 +140,7 @@ export function MomentPanel({ momentId, onClose }: Props) {
             <div className="px-4 py-3">
               <div className="mb-2 flex items-center gap-2">
                 <div className="h-px flex-1 bg-line/20" />
-                <span className="text-[8px] uppercase tracking-[0.2em] text-text-3">
+                <span className="font-sans text-[8px] font-semibold uppercase tracking-[0.2em] text-text-3">
                   events &middot; {moment.events?.length ?? 0} turns
                 </span>
                 <div className="h-px flex-1 bg-line/20" />
@@ -159,7 +153,7 @@ export function MomentPanel({ momentId, onClose }: Props) {
                   ))}
                 </div>
               ) : (
-                <div className="py-6 text-center text-[9px] uppercase tracking-widest text-text-3">
+                <div className="py-6 text-center font-sans text-[9px] uppercase tracking-widest text-text-3">
                   no events
                 </div>
               )}

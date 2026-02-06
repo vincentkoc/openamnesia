@@ -1,6 +1,5 @@
 import type { Moment } from "../../lib/api";
-import { cn, frictionLabel, frictionColor, frictionDotColor, timeAgo, truncate } from "../../lib/utils";
-import { SourceBadge } from "../common/SourceBadge";
+import { cn, frictionLabel, frictionColor, formatTime, truncate, sourceColor } from "../../lib/utils";
 
 interface Props {
   moment: Moment;
@@ -21,87 +20,49 @@ export function MomentCard({ moment, index, selected, onSelect }: Props) {
           onSelect(moment.moment_id);
         }
       }}
-      className={cn(
-        "group anim-fade cursor-pointer border-b border-line/20 transition-colors outline-none",
-        selected
-          ? "bg-accent-dim/40 border-l-2 border-l-accent"
-          : "hover:bg-void-1/50",
-      )}
-      style={{ animationDelay: `${index * 40}ms` }}
+      className={cn("data-row", selected && "selected")}
     >
-      {/* Diff hunk header */}
-      <div className={cn(
-        "flex items-center gap-2 px-4 py-1.5 text-[9px]",
-        selected ? "bg-accent-dim/50" : "bg-accent-dim/20",
+      {/* TIME (80px) */}
+      <span className="w-[80px] shrink-0 tabular-nums text-text-2">
+        {moment.session_start_ts ? formatTime(moment.session_start_ts) : "--:--:--"}
+      </span>
+
+      {/* SOURCE (60px) */}
+      <span className="flex w-[60px] shrink-0 items-center gap-1.5">
+        <span className={cn("h-1.5 w-1.5 rounded-full", sourceColor(moment.source ?? ""))} />
+        <span className="text-text-3 truncate">{moment.source ?? ""}</span>
+      </span>
+
+      {/* INTENT (flex) */}
+      <span className={cn(
+        "min-w-0 flex-1 truncate font-medium",
+        selected ? "text-accent" : "text-text-0",
       )}>
-        <span className="font-bold text-accent">@@</span>
-        {moment.source && <SourceBadge source={moment.source} />}
-        {moment.session_start_ts && (
-          <span className="tabular-nums text-text-3">
-            {timeAgo(moment.session_start_ts)}
-          </span>
-        )}
-        <span className="tabular-nums text-text-3">
-          {moment.end_turn - moment.start_turn + 1} turns
-        </span>
-        <span className="ml-auto flex items-center gap-1.5">
-          <span
-            className={cn(
-              "h-1.5 w-1.5 rounded-full",
-              frictionDotColor(moment.friction_score),
-            )}
-          />
-          <span
-            className={cn(
-              "font-semibold uppercase tracking-[0.15em]",
-              frictionColor(moment.friction_score),
-            )}
-          >
-            {frictionLabel(moment.friction_score)}
-          </span>
-        </span>
-        <span className="font-bold text-accent">@@</span>
-      </div>
+        {truncate(moment.intent ?? "", 80)}
+      </span>
 
-      {/* Diff content lines */}
-      <div className="px-4 py-3">
-        {/* Intent as addition (+) */}
-        {moment.intent && (
-          <div className="flex gap-2">
-            <span className="w-3 shrink-0 text-right font-bold text-ok">
-              +
-            </span>
-            <span className={cn(
-              "text-[12px] font-medium transition-colors",
-              selected ? "text-accent" : "text-text-0 group-hover:text-accent",
-            )}>
-              {truncate(moment.intent, 120)}
-            </span>
-          </div>
-        )}
+      {/* OUTCOME (200px) */}
+      <span className="w-[200px] shrink-0 truncate text-text-2">
+        {truncate(moment.outcome ?? "", 50)}
+      </span>
 
-        {/* Summary as context */}
-        {moment.summary && (
-          <div className="mt-1 flex gap-2">
-            <span className="w-3 shrink-0 text-right text-text-3">&nbsp;</span>
-            <span className="text-[11px] leading-relaxed text-text-2">
-              {truncate(moment.summary, 200)}
-            </span>
-          </div>
-        )}
+      {/* TURNS (80px) */}
+      <span className="w-[80px] shrink-0 tabular-nums text-text-3 text-right">
+        {moment.end_turn - moment.start_turn + 1} turns
+      </span>
 
-        {/* Outcome as addition */}
-        {moment.outcome && (
-          <div className="mt-1 flex gap-2">
-            <span className="w-3 shrink-0 text-right font-bold text-ok">
-              +
-            </span>
-            <span className="text-[11px] text-ok/80">
-              {truncate(moment.outcome, 140)}
-            </span>
-          </div>
-        )}
-      </div>
+      {/* FRICTION (60px) */}
+      <span className={cn(
+        "w-[60px] shrink-0 text-right text-[10px] font-semibold uppercase tracking-wider",
+        frictionColor(moment.friction_score),
+      )}>
+        {frictionLabel(moment.friction_score)}
+      </span>
+
+      {/* SESSION (80px) */}
+      <span className="w-[80px] shrink-0 truncate text-right text-[10px] tabular-nums text-text-3">
+        {moment.session_key.slice(0, 12)}
+      </span>
     </div>
   );
 }

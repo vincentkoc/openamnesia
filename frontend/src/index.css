@@ -42,6 +42,7 @@
 /* ── Tailwind theme tokens ────────────────────────────────────── */
 
 @theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
   --color-void-0: var(--bg);
@@ -84,7 +85,7 @@ html, body, #root { height: 100%; }
 body {
   background: var(--bg);
   color: var(--t0);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 13px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -96,7 +97,7 @@ body {
   background-image:
     linear-gradient(var(--grid-c) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-c) 1px, transparent 1px);
-  background-size: 48px 48px;
+  background-size: 32px 32px;
   background-position: -1px -1px;
 }
 
@@ -147,6 +148,10 @@ body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
 
 .anim-fade { animation: fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .anim-pulse { animation: pulse-glow 2.5s ease-in-out infinite; }
@@ -181,4 +186,111 @@ body {
 .card:hover {
   border-color: var(--line-b);
   box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+}
+
+/* ── Bloomberg-style primitives ───────────────────────────────── */
+
+/* Ticker track — horizontal scrolling marquee */
+.ticker-track {
+  overflow: hidden;
+  white-space: nowrap;
+  mask-image: linear-gradient(90deg, transparent, black 24px, black calc(100% - 24px), transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 24px, black calc(100% - 24px), transparent);
+}
+.ticker-track .ticker-inner {
+  display: inline-flex;
+  animation: ticker-scroll 40s linear infinite;
+}
+.ticker-track:hover .ticker-inner {
+  animation-play-state: paused;
+}
+
+/* Data row — compact 28px tabular row */
+.data-row {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 16px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  border-bottom: 1px solid var(--line-c);
+  border-bottom-color: color-mix(in srgb, var(--line-c) 30%, transparent);
+  transition: background-color 0.1s;
+  cursor: pointer;
+}
+.data-row:hover {
+  background-color: var(--surface-1);
+}
+.data-row.selected {
+  background-color: rgba(232, 86, 42, 0.08);
+  border-left: 2px solid var(--color-accent);
+  padding-left: 14px;
+}
+
+/* Toggle group — pill-style toggle buttons */
+.toggle-group {
+  display: inline-flex;
+  border: 1px solid var(--line-c);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.toggle-group button {
+  padding: 2px 10px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--t2);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.toggle-group button:not(:last-child) {
+  border-right: 1px solid var(--line-c);
+}
+.toggle-group button:hover {
+  color: var(--t1);
+  background: var(--surface-1);
+}
+.toggle-group button.active {
+  color: var(--bg);
+  background: var(--color-accent);
+}
+
+/* Stat pip — inline stat with mono value + sans label */
+.stat-pip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.stat-pip .stat-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t0);
+  font-variant-numeric: tabular-nums;
+}
+.stat-pip .stat-label {
+  font-family: var(--font-sans);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--t3);
+}
+
+/* Section rule — column header bar */
+.section-rule {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 16px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--t3);
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--line-c);
+  font-family: var(--font-sans);
 }
