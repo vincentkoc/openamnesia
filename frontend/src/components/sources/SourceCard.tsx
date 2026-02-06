@@ -12,7 +12,7 @@ export function SourceCard({ source }: Props) {
     : "0.0";
 
   return (
-    <div className="glow-border group rounded-lg border border-line bg-void-1 p-4 transition-colors hover:border-line-bright hover:bg-void-2">
+    <div className="card group rounded-lg border border-line/40 bg-void-1/60 p-4 transition-colors hover:border-line-bright hover:bg-void-2">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">

@@ -13,11 +13,11 @@ export function SkillCard({ skill }: Props) {
   const count = m.occurrences as number | undefined;
 
   return (
-    <div className="glow-border group rounded-lg border border-line bg-void-1 p-4 transition-colors hover:border-line-bright hover:bg-void-2">
+    <div className="card group rounded-lg border border-line/40 bg-void-1/60 p-4 transition-colors hover:border-line-bright hover:bg-void-2">
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h3 className="text-[13px] font-semibold text-text-0 group-hover:text-accent-bright transition-colors">
+          <h3 className="text-[13px] font-semibold text-text-0 group-hover:text-accent transition-colors">
             {truncate(skill.name, 35)}
           </h3>
           <div className="mt-0.5 text-[10px] text-text-3">

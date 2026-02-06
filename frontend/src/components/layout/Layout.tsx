@@ -3,9 +3,9 @@ import { Header } from "./Header";
 
 export function Layout() {
   return (
-    <div className="min-h-screen">
+    <div className="flex h-screen flex-col overflow-hidden">
       <Header />
-      <main className="mx-auto max-w-[1200px] px-8 py-10">
+      <main className="flex-1 overflow-hidden">
         <Outlet />
       </main>
     </div>
