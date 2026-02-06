@@ -15,7 +15,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup-venv install install-dev test lint format precommit run-once run clean
+.PHONY: help setup-venv install install-dev test typecheck lint format precommit run-once run clean
 
 help:
 	@echo "Available targets:"
@@ -23,6 +23,7 @@ help:
 	@echo "  install      Install package"
 	@echo "  install-dev  Install package with dev dependencies"
 	@echo "  test         Run tests"
+	@echo "  typecheck    Run mypy type checks"
 	@echo "  lint         Run ruff checks"
 	@echo "  format       Run ruff formatter"
 	@echo "  precommit    Run pre-commit hooks on all files"
@@ -41,6 +42,9 @@ install-dev:
 
 test:
 	PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 MPLCONFIGDIR=/tmp/mpl $(PYTHON) -m pytest
+
+typecheck:
+	$(PYTHON) -m mypy --config-file pyproject.toml
 
 lint:
 	$(PYTHON) -m ruff check .

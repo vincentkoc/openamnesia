@@ -104,4 +104,5 @@ def register_hooks(registry: HookRegistry) -> None:
 ## Validate
 ```bash
 pytest -q
+python -m mypy --config-file pyproject.toml
 ```
