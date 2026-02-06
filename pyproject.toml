@@ -23,6 +23,7 @@ dev = [
 ]
 llm = [
   "litellm>=1.59.0",
+  "pydantic>=2.8.0",
 ]
 
 [project.scripts]
