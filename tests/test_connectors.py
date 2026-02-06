@@ -16,10 +16,12 @@ def test_file_drop_connector_tracks_line_offset(tmp_path: Path) -> None:
         settings=ConnectorSettings(source_name="cursor", root_path=src_dir, pattern="*.jsonl")
     )
 
-    records1, state1 = connector.poll(state={})
-    assert len(records1) == 2
-    assert state1[str(sample.resolve())] == 2
+    result1 = connector.poll(state={})
+    assert len(result1.records) == 2
+    assert result1.state[str(sample.resolve())] == 2
+    assert result1.stats.items_seen == 2
+    assert result1.stats.groups_seen == 1
 
-    records2, state2 = connector.poll(state=state1)
-    assert len(records2) == 0
-    assert state2 == state1
+    result2 = connector.poll(state=result1.state)
+    assert len(result2.records) == 0
+    assert result2.state == result1.state
