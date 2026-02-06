@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from amnesia.models import (
+    ClusterEnrichment,
+    ClusterMembership,
     EntityMention,
     EntityRollup,
     Event,
+    EventCluster,
+    EventEmbedding,
     IngestAudit,
     Moment,
     Session,
@@ -23,6 +28,10 @@ class InMemoryStore:
     audits: list[IngestAudit] = field(default_factory=list)
     entity_mentions: dict[str, EntityMention] = field(default_factory=dict)
     entity_rollups: dict[str, EntityRollup] = field(default_factory=dict)
+    event_embeddings: dict[str, EventEmbedding] = field(default_factory=dict)
+    event_clusters: dict[str, EventCluster] = field(default_factory=dict)
+    cluster_memberships: dict[str, ClusterMembership] = field(default_factory=dict)
+    cluster_enrichments: dict[str, ClusterEnrichment] = field(default_factory=dict)
 
     def init_schema(self) -> None:
         return
@@ -84,6 +93,52 @@ class InMemoryStore:
                 self.entity_rollups[rollup.rollup_id] = rollup
                 inserted += 1
         return inserted
+
+    def save_event_embeddings(self, embeddings: list[EventEmbedding]) -> int:
+        inserted = 0
+        for embedding in embeddings:
+            if embedding.embedding_id not in self.event_embeddings:
+                self.event_embeddings[embedding.embedding_id] = embedding
+                inserted += 1
+        return inserted
+
+    def save_event_clusters(self, clusters: list[EventCluster]) -> int:
+        inserted = 0
+        for cluster in clusters:
+            if cluster.cluster_id not in self.event_clusters:
+                self.event_clusters[cluster.cluster_id] = cluster
+                inserted += 1
+        return inserted
+
+    def save_cluster_memberships(self, memberships: list[ClusterMembership]) -> int:
+        inserted = 0
+        for membership in memberships:
+            if membership.membership_id not in self.cluster_memberships:
+                self.cluster_memberships[membership.membership_id] = membership
+                inserted += 1
+        return inserted
+
+    def save_cluster_enrichments(self, enrichments: list[ClusterEnrichment]) -> int:
+        inserted = 0
+        for enrichment in enrichments:
+            if enrichment.enrichment_id not in self.cluster_enrichments:
+                self.cluster_enrichments[enrichment.enrichment_id] = enrichment
+                inserted += 1
+        return inserted
+
+    def list_events_for_source(
+        self,
+        *,
+        source: str,
+        since_ts: str | None = None,
+        limit: int = 5000,
+    ) -> list[Event]:
+        events = [event for event in self.events.values() if event.source == source]
+        if since_ts:
+            threshold = datetime.fromisoformat(since_ts.replace("Z", "+00:00"))
+            events = [event for event in events if event.ts >= threshold]
+        events.sort(key=lambda item: item.ts, reverse=True)
+        return events[: max(0, limit)]
 
     def close(self) -> None:
         return

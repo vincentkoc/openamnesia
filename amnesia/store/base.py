@@ -3,9 +3,13 @@ from __future__ import annotations
 from typing import Protocol
 
 from amnesia.models import (
+    ClusterEnrichment,
+    ClusterMembership,
     EntityMention,
     EntityRollup,
     Event,
+    EventCluster,
+    EventEmbedding,
     IngestAudit,
     Moment,
     Session,
@@ -33,5 +37,21 @@ class Store(Protocol):
     def save_entity_mentions(self, mentions: list[EntityMention]) -> int: ...
 
     def save_entity_rollups(self, rollups: list[EntityRollup]) -> int: ...
+
+    def save_event_embeddings(self, embeddings: list[EventEmbedding]) -> int: ...
+
+    def save_event_clusters(self, clusters: list[EventCluster]) -> int: ...
+
+    def save_cluster_memberships(self, memberships: list[ClusterMembership]) -> int: ...
+
+    def save_cluster_enrichments(self, enrichments: list[ClusterEnrichment]) -> int: ...
+
+    def list_events_for_source(
+        self,
+        *,
+        source: str,
+        since_ts: str | None = None,
+        limit: int = 5000,
+    ) -> list[Event]: ...
 
     def close(self) -> None: ...

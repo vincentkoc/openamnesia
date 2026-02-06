@@ -94,3 +94,49 @@ class EntityRollup:
     entity_value: str
     mention_count: int
     meta_json: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class EventEmbedding:
+    embedding_id: str
+    event_id: str
+    ts: datetime
+    source: str
+    model: str
+    vector_json: list[float]
+    text_hash: str
+    meta_json: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class EventCluster:
+    cluster_id: str
+    ts: datetime
+    source: str
+    algorithm: str
+    label: str
+    size: int
+    centroid_json: list[float]
+    meta_json: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class ClusterMembership:
+    membership_id: str
+    cluster_id: str
+    event_id: str
+    distance: float
+    ts: datetime
+    source: str
+    meta_json: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class ClusterEnrichment:
+    enrichment_id: str
+    cluster_id: str
+    ts: datetime
+    source: str
+    provider: str
+    summary: str
+    payload_json: dict[str, Any] = field(default_factory=dict)

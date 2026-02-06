@@ -120,6 +120,48 @@ CREATE TABLE IF NOT EXISTS entity_rollups (
   meta_json TEXT
 );
 
+CREATE TABLE IF NOT EXISTS event_embeddings (
+  embedding_id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  ts TEXT NOT NULL,
+  source TEXT NOT NULL,
+  model TEXT NOT NULL,
+  vector_json TEXT NOT NULL,
+  text_hash TEXT NOT NULL,
+  meta_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS event_clusters (
+  cluster_id TEXT PRIMARY KEY,
+  ts TEXT NOT NULL,
+  source TEXT NOT NULL,
+  algorithm TEXT NOT NULL,
+  label TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  centroid_json TEXT NOT NULL,
+  meta_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS cluster_memberships (
+  membership_id TEXT PRIMARY KEY,
+  cluster_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  distance REAL NOT NULL,
+  ts TEXT NOT NULL,
+  source TEXT NOT NULL,
+  meta_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS cluster_enrichments (
+  enrichment_id TEXT PRIMARY KEY,
+  cluster_id TEXT NOT NULL,
+  ts TEXT NOT NULL,
+  source TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  payload_json TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_events_source_ts ON events(source, ts);
 CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
 CREATE INDEX IF NOT EXISTS idx_events_actor_ts ON events(actor, ts);
@@ -127,3 +169,9 @@ CREATE INDEX IF NOT EXISTS idx_moments_session ON moments(session_key);
 CREATE INDEX IF NOT EXISTS idx_mentions_source_ts ON entity_mentions(source, ts);
 CREATE INDEX IF NOT EXISTS idx_mentions_type_value ON entity_mentions(entity_type, entity_value);
 CREATE INDEX IF NOT EXISTS idx_rollups_bucket ON entity_rollups(bucket_granularity, bucket_start_ts);
+CREATE INDEX IF NOT EXISTS idx_embeddings_event ON event_embeddings(event_id);
+CREATE INDEX IF NOT EXISTS idx_embeddings_source_ts ON event_embeddings(source, ts);
+CREATE INDEX IF NOT EXISTS idx_clusters_source_ts ON event_clusters(source, ts);
+CREATE INDEX IF NOT EXISTS idx_memberships_cluster ON cluster_memberships(cluster_id);
+CREATE INDEX IF NOT EXISTS idx_memberships_event ON cluster_memberships(event_id);
+CREATE INDEX IF NOT EXISTS idx_enrichments_cluster ON cluster_enrichments(cluster_id);

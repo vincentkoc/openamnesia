@@ -7,9 +7,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from amnesia.models import (
+    ClusterEnrichment,
+    ClusterMembership,
     EntityMention,
     EntityRollup,
     Event,
+    EventCluster,
+    EventEmbedding,
     IngestAudit,
     Moment,
     Session,
@@ -283,6 +287,158 @@ class SQLiteStore:
     def close(self) -> None:
         self.conn.close()
 
+    def save_event_embeddings(self, embeddings: list[EventEmbedding]) -> int:
+        if not embeddings:
+            return 0
+        before = self.conn.total_changes
+        self.conn.executemany(
+            """
+            INSERT OR IGNORE INTO event_embeddings (
+                embedding_id, event_id, ts, source, model, vector_json, text_hash, meta_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    item.embedding_id,
+                    item.event_id,
+                    item.ts.astimezone(UTC).isoformat(),
+                    item.source,
+                    item.model,
+                    to_json(item.vector_json),
+                    item.text_hash,
+                    to_json(item.meta_json),
+                )
+                for item in embeddings
+            ],
+        )
+        self.conn.commit()
+        return self.conn.total_changes - before
+
+    def save_event_clusters(self, clusters: list[EventCluster]) -> int:
+        if not clusters:
+            return 0
+        before = self.conn.total_changes
+        self.conn.executemany(
+            """
+            INSERT OR REPLACE INTO event_clusters (
+                cluster_id, ts, source, algorithm, label, size, centroid_json, meta_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    item.cluster_id,
+                    item.ts.astimezone(UTC).isoformat(),
+                    item.source,
+                    item.algorithm,
+                    item.label,
+                    item.size,
+                    to_json(item.centroid_json),
+                    to_json(item.meta_json),
+                )
+                for item in clusters
+            ],
+        )
+        self.conn.commit()
+        return self.conn.total_changes - before
+
+    def save_cluster_memberships(self, memberships: list[ClusterMembership]) -> int:
+        if not memberships:
+            return 0
+        before = self.conn.total_changes
+        self.conn.executemany(
+            """
+            INSERT OR REPLACE INTO cluster_memberships (
+                membership_id, cluster_id, event_id, distance, ts, source, meta_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    item.membership_id,
+                    item.cluster_id,
+                    item.event_id,
+                    item.distance,
+                    item.ts.astimezone(UTC).isoformat(),
+                    item.source,
+                    to_json(item.meta_json),
+                )
+                for item in memberships
+            ],
+        )
+        self.conn.commit()
+        return self.conn.total_changes - before
+
+    def save_cluster_enrichments(self, enrichments: list[ClusterEnrichment]) -> int:
+        if not enrichments:
+            return 0
+        before = self.conn.total_changes
+        self.conn.executemany(
+            """
+            INSERT OR REPLACE INTO cluster_enrichments (
+                enrichment_id, cluster_id, ts, source, provider, summary, payload_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    item.enrichment_id,
+                    item.cluster_id,
+                    item.ts.astimezone(UTC).isoformat(),
+                    item.source,
+                    item.provider,
+                    item.summary,
+                    to_json(item.payload_json),
+                )
+                for item in enrichments
+            ],
+        )
+        self.conn.commit()
+        return self.conn.total_changes - before
+
+    def list_events_for_source(
+        self,
+        *,
+        source: str,
+        since_ts: str | None = None,
+        limit: int = 5000,
+    ) -> list[Event]:
+        params: list[object] = [source]
+        where = "source = ?"
+        if since_ts:
+            where += " AND ts >= ?"
+            params.append(since_ts)
+        params.append(max(0, limit))
+        rows = self.conn.execute(
+            f"""
+            SELECT event_id, ts, source, session_id, turn_index, actor, content,
+                   tool_name, tool_status, tool_args_json, tool_result_json, meta_json
+            FROM events
+            WHERE {where}
+            ORDER BY ts DESC
+            LIMIT ?
+            """
+            ,
+            tuple(params),
+        ).fetchall()
+
+        events: list[Event] = []
+        for row in rows:
+            events.append(
+                Event(
+                    event_id=row["event_id"],
+                    ts=datetime.fromisoformat(row["ts"]),
+                    source=row["source"],
+                    session_id=row["session_id"],
+                    turn_index=int(row["turn_index"]),
+                    actor=row["actor"],
+                    content=row["content"],
+                    tool_name=row["tool_name"],
+                    tool_status=row["tool_status"],
+                    tool_args_json=from_json(row["tool_args_json"]),
+                    tool_result_json=from_json(row["tool_result_json"]),
+                    meta_json=from_json(row["meta_json"]) or {},
+                )
+            )
+        return events
+
     @staticmethod
     def _extract_path(dsn: str) -> str:
         if not dsn.startswith("sqlite:///"):
@@ -294,3 +450,12 @@ def to_json(value: object) -> str | None:
     if value is None:
         return None
     return json.dumps(value, ensure_ascii=True)
+
+
+def from_json(value: str | None) -> object | None:
+    if value is None:
+        return None
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return None

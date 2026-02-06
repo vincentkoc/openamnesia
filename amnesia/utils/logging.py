@@ -67,8 +67,21 @@ def setup_logging(level: int | str | None = None, *, force: bool = False) -> Non
     logging.getLogger("amnesia").setLevel(target_level)
 
     # Keep noisy libs quiet by default.
-    for name in ("urllib3", "requests", "httpx", "httpcore"):
+    for name in (
+        "urllib3",
+        "requests",
+        "httpx",
+        "httpcore",
+        "LiteLLM",
+        "litellm",
+        "openai",
+        "matplotlib",
+        "matplotlib.font_manager",
+        "fontTools",
+    ):
         logging.getLogger(name).setLevel(logging.WARNING)
+    for name in ("LiteLLM", "litellm", "matplotlib", "matplotlib.font_manager", "fontTools"):
+        logging.getLogger(name).setLevel(logging.ERROR)
 
     _configured = True
     _configured_level = target_level

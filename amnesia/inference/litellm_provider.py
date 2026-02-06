@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,6 +15,9 @@ class LiteLLMProvider:
     max_tokens: int = 512
 
     def complete(self, *, system: str, user: str, **kwargs: Any) -> str:
+        os.environ.setdefault("LITELLM_LOG", "ERROR")
+        logging.getLogger("LiteLLM").setLevel(logging.ERROR)
+        logging.getLogger("litellm").setLevel(logging.ERROR)
         try:
             from litellm import completion
         except Exception as exc:  # pragma: no cover
