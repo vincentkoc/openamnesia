@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 
 from amnesia.models import (
     ClusterEnrichment,
@@ -135,7 +135,9 @@ class InMemoryStore:
     ) -> list[Event]:
         events = [event for event in self.events.values() if event.source == source]
         if since_ts:
-            threshold = datetime.fromisoformat(since_ts.replace("Z", "+00:00"))
+            threshold = datetime.fromisoformat(str(since_ts).replace("Z", "+00:00"))
+            if threshold.tzinfo is None:
+                threshold = threshold.replace(tzinfo=UTC)
             events = [event for event in events if event.ts >= threshold]
         events.sort(key=lambda item: item.ts, reverse=True)
         return events[: max(0, limit)]

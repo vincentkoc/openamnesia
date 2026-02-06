@@ -132,9 +132,7 @@ def list_events(
     params.extend([limit, offset])
 
     rows = conn.execute(sql, params).fetchall()
-    total = conn.execute(
-        f"SELECT COUNT(*) FROM events {where}", params[:-2]
-    ).fetchone()[0]
+    total = conn.execute(f"SELECT COUNT(*) FROM events {where}", params[:-2]).fetchone()[0]
 
     return {"items": _rows_to_dicts(rows), "total": total, "limit": limit, "offset": offset}
 
@@ -166,9 +164,7 @@ def list_sessions(
     params.extend([limit, offset])
     rows = conn.execute(sql, params).fetchall()
 
-    total = conn.execute(
-        f"SELECT COUNT(*) FROM sessions s {where}", params[:-2]
-    ).fetchone()[0]
+    total = conn.execute(f"SELECT COUNT(*) FROM sessions s {where}", params[:-2]).fetchone()[0]
     return {"items": _rows_to_dicts(rows), "total": total, "limit": limit, "offset": offset}
 
 
@@ -212,7 +208,10 @@ def get_moment(moment_id: str):
     conn = _get_conn()
     moment = conn.execute(
         """
-        SELECT m.*, s.source, s.start_ts as session_start_ts, s.end_ts as session_end_ts, s.summary as session_summary
+        SELECT m.*, s.source,
+               s.start_ts as session_start_ts,
+               s.end_ts as session_end_ts,
+               s.summary as session_summary
         FROM moments m
         JOIN sessions s ON m.session_key = s.session_key
         WHERE m.moment_id = ?
@@ -264,9 +263,7 @@ def list_skills(
     params.extend([limit, offset])
     rows = conn.execute(sql, params).fetchall()
 
-    total = conn.execute(
-        f"SELECT COUNT(*) FROM skills {where}", params[:-2]
-    ).fetchone()[0]
+    total = conn.execute(f"SELECT COUNT(*) FROM skills {where}", params[:-2]).fetchone()[0]
     return {"items": _rows_to_dicts(rows), "total": total, "limit": limit, "offset": offset}
 
 
@@ -302,9 +299,7 @@ def get_skill(skill_id: str):
 @app.get("/api/sources")
 def list_sources():
     conn = _get_conn()
-    rows = conn.execute(
-        "SELECT * FROM source_status ORDER BY source"
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM source_status ORDER BY source").fetchall()
     return {"items": _rows_to_dicts(rows)}
 
 
@@ -384,9 +379,7 @@ def list_entities(
 @app.get("/api/audit")
 def list_audit(limit: int = Query(default=20, le=100)):
     conn = _get_conn()
-    rows = conn.execute(
-        "SELECT * FROM ingest_audit ORDER BY ts DESC LIMIT ?", (limit,)
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM ingest_audit ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
     return {"items": _rows_to_dicts(rows)}
 
 

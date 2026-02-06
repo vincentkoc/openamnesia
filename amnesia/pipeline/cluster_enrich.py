@@ -96,7 +96,8 @@ def enrich_clusters(
             )
             if cfg.fail_fast_on_llm_error and not llm_succeeded:
                 raise RuntimeError(
-                    f"Cluster enrichment failed for {cluster.cluster_id}: {llm_error or 'unknown_error'}"
+                    "Cluster enrichment failed for "
+                    f"{cluster.cluster_id}: {llm_error or 'unknown_error'}"
                 )
 
         enrichment_id = hashlib.sha256(
@@ -185,12 +186,11 @@ def _llm_summary(
         )
     except Exception as exc:
         error_text = str(exc)
-        if "finish_reason='length'" in error_text or "finish_reason=\"length\"" in error_text:
+        if "finish_reason='length'" in error_text or 'finish_reason="length"' in error_text:
             # Last-resort plain-text path when strict JSON exhausts output budget.
             try:
                 plain_system = (
-                    "Summarize this telemetry cluster in <= 14 words. "
-                    "No JSON, no markdown."
+                    "Summarize this telemetry cluster in <= 14 words. No JSON, no markdown."
                 )
                 plain = provider.complete(
                     system=plain_system,
@@ -224,7 +224,7 @@ def _llm_summary(
 
 def _compact_example_text(text: str) -> str:
     compact = " ".join(str(text).split())
-    compact = compact.replace("\uFFFC", " ")
+    compact = compact.replace("\ufffc", " ")
     compact = re.sub(r"[^\w\s@:/+.#-]", "", compact)
     compact = re.sub(r"\s+", " ", compact).strip()
     if len(compact) < 2:

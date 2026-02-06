@@ -62,9 +62,7 @@ def cluster_embeddings(
 
         for item in items:
             distance = _l2_distance(item.vector_json, centroid)
-            membership_id = hashlib.sha256(
-                f"{cluster_id}|{item.event_id}".encode()
-            ).hexdigest()
+            membership_id = hashlib.sha256(f"{cluster_id}|{item.event_id}".encode()).hexdigest()
             memberships.append(
                 ClusterMembership(
                     membership_id=membership_id,

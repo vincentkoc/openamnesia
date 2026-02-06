@@ -154,8 +154,7 @@ def run_imessage_ingest(config: IMessageIngestConfig) -> IMessageIngestResult:
             store_dsn=config.store_dsn,
             error=str(exc),
             hint=(
-                "Grant Full Disk Access to your terminal/python app, "
-                "or use imessage jsonl exports."
+                "Grant Full Disk Access to your terminal/python app, or use imessage jsonl exports."
             ),
             disk_access_request_attempted=request_attempted,
             disk_access_settings_opened=request_opened,

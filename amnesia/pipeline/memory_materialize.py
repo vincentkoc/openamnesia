@@ -14,13 +14,95 @@ class MemoryMaterializationResult:
     fact_candidates: list[dict[str, Any]]
 
 
+@dataclass(slots=True)
+class SkillSeed:
+    intent: str
+    summary: str
+    confidence: float
+    support: int
+
+
+_SKILL_PROFILES: dict[str, dict[str, Any]] = {
+    "event_planning": {
+        "name": "Plan and follow up on events",
+        "steps": [
+            "capture event details and constraints",
+            "list stakeholders and follow-ups",
+            "track next actions and deadlines",
+        ],
+        "checks": ["event_context_present", "next_action_present"],
+    },
+    "networking_intro": {
+        "name": "Create and track introductions",
+        "steps": [
+            "identify the two parties",
+            "collect context and goal",
+            "draft intro and follow-up reminders",
+        ],
+        "checks": ["contacts_present", "intro_goal_present"],
+    },
+    "contact_capture": {
+        "name": "Capture and confirm new contacts",
+        "steps": [
+            "extract name and source context",
+            "confirm spelling and affiliation",
+            "store as a contact candidate",
+        ],
+        "checks": ["person_name_present", "source_context_present"],
+    },
+    "coordination": {
+        "name": "Coordinate schedules and follow-ups",
+        "steps": [
+            "propose time windows",
+            "confirm availability",
+            "log next-step reminders",
+        ],
+        "checks": ["time_reference_present", "followup_intent_present"],
+    },
+    "stakeholder_alignment": {
+        "name": "Align stakeholders on risks and fit",
+        "steps": [
+            "summarize risk or fit concerns",
+            "collect stakeholder positions",
+            "record decision blockers",
+        ],
+        "checks": ["stakeholders_present", "risk_or_fit_present"],
+    },
+    "research_synthesis": {
+        "name": "Synthesize research into next actions",
+        "steps": [
+            "collect options and constraints",
+            "compare trade-offs",
+            "recommend next actions",
+        ],
+        "checks": ["options_present", "decision_context_present"],
+    },
+    "frontend_terminal_build": {
+        "name": "Ship frontend terminal experiences",
+        "steps": [
+            "define interaction goal",
+            "mock terminal flows",
+            "implement and validate UX",
+        ],
+        "checks": ["ux_goal_present", "flow_defined"],
+    },
+}
+
+_INTENT_ALIASES: dict[str, str] = {
+    "networking_followup": "networking_intro",
+    "question_preparation": "research_synthesis",
+    "stakeholder_alignment": "stakeholder_alignment",
+    "coordination": "coordination",
+}
+
+
 def materialize_from_enrichments(
     clusters: list[EventCluster],
     enrichments: list[ClusterEnrichment],
 ) -> MemoryMaterializationResult:
     cluster_by_id = {cluster.cluster_id: cluster for cluster in clusters}
     fact_candidates: list[dict[str, Any]] = []
-    skill_seed: list[tuple[str, float, int]] = []
+    skill_seed: list[SkillSeed] = []
 
     for enrichment in enrichments:
         payload = enrichment.payload_json or {}
@@ -46,10 +128,17 @@ def materialize_from_enrichments(
                 "provider": enrichment.provider,
             }
         )
-        if not intent:
+        if not intent or intent in {"cluster_summary_workflow"}:
             intent = _infer_intent_from_summary(enrichment.summary)
         if intent:
-            skill_seed.append((intent, confidence, max(1, size)))
+            skill_seed.append(
+                SkillSeed(
+                    intent=intent,
+                    summary=enrichment.summary or "",
+                    confidence=confidence,
+                    support=max(1, size),
+                )
+            )
 
     skill_candidates = _derive_skill_candidates(skill_seed)
     return MemoryMaterializationResult(
@@ -58,33 +147,45 @@ def materialize_from_enrichments(
     )
 
 
-def _derive_skill_candidates(skill_seed: list[tuple[str, float, int]]) -> list[dict[str, Any]]:
-    count_by_intent: Counter[str] = Counter()
+def _derive_skill_candidates(skill_seed: list[SkillSeed]) -> list[dict[str, Any]]:
+    count_by_key: Counter[str] = Counter()
     confidence_sum: dict[str, float] = {}
     support_sum: dict[str, int] = {}
-    for intent, confidence, support in skill_seed:
-        count_by_intent[intent] += 1
-        confidence_sum[intent] = confidence_sum.get(intent, 0.0) + confidence
-        support_sum[intent] = support_sum.get(intent, 0) + support
+    intent_samples: dict[str, list[str]] = {}
+    summary_samples: dict[str, list[str]] = {}
+
+    for seed in skill_seed:
+        skill_key = _classify_skill_key(seed.intent, seed.summary)
+        if not skill_key:
+            continue
+        count_by_key[skill_key] += 1
+        confidence_sum[skill_key] = confidence_sum.get(skill_key, 0.0) + seed.confidence
+        support_sum[skill_key] = support_sum.get(skill_key, 0) + seed.support
+        intent_samples.setdefault(skill_key, []).append(seed.intent)
+        summary_samples.setdefault(skill_key, []).append(seed.summary)
 
     candidates: list[dict[str, Any]] = []
-    for intent, freq in count_by_intent.most_common():
-        avg_conf = confidence_sum[intent] / max(1, freq)
-        total_support = support_sum[intent]
+    for skill_key, freq in count_by_key.most_common():
+        profile = _SKILL_PROFILES.get(skill_key)
+        if not profile:
+            continue
+        avg_conf = confidence_sum[skill_key] / max(1, freq)
+        total_support = support_sum[skill_key]
+        sample_intents = sorted(set(intent_samples.get(skill_key, [])))[:3]
+        sample_summaries = [
+            _clip_summary(summary) for summary in summary_samples.get(skill_key, [])[:2]
+        ]
         candidates.append(
             {
-                "name": f"cluster_{intent}",
-                "trigger": {"intent": intent},
-                "steps": [
-                    "collect cluster exemplars",
-                    "summarize intent/outcome/friction",
-                    "store reusable guidance",
-                ],
-                "checks": ["summary_present", "intent_present", "cluster_support>=1"],
+                "name": profile["name"],
+                "trigger": {"skill_key": skill_key, "sample_intents": sample_intents},
+                "steps": profile["steps"],
+                "checks": profile["checks"],
                 "metrics": {
                     "cluster_frequency": freq,
                     "avg_confidence": round(avg_conf, 3),
                     "support_count": total_support,
+                    "sample_summaries": sample_summaries,
                 },
             }
         )
@@ -108,3 +209,37 @@ def _infer_intent_from_summary(summary: str) -> str:
     if "schedule" in low or "call" in low or "breakfast" in low:
         return "coordination"
     return "cluster_summary_workflow"
+
+
+def _classify_skill_key(intent: str, summary: str) -> str | None:
+    normalized_intent = _clean_token(intent)
+    if normalized_intent in _INTENT_ALIASES:
+        return _INTENT_ALIASES[normalized_intent]
+
+    text = " ".join([normalized_intent, summary.lower()])
+    if _has_any(text, ("event", "meetup", "meet up", "conference", "panel", "summit", "webinar")):
+        return "event_planning"
+    if _has_any(text, ("intro", "introduc", "connect", "network", "reach out", "follow up")):
+        return "networking_intro"
+    if _has_any(text, ("contact", "met", "meet", "name", "who is")):
+        return "contact_capture"
+    if _has_any(text, ("schedule", "calendar", "call", "meeting", "sync", "f2f")):
+        return "coordination"
+    if _has_any(text, ("stakeholder", "security", "risk", "compliance", "open source", "use case")):
+        return "stakeholder_alignment"
+    if _has_any(text, ("compare", "evaluate", "option", "decision", "trade-off", "tradeoff")):
+        return "research_synthesis"
+    if _has_any(text, ("frontend", "terminal", "cli", "tui", "ui", "ux")):
+        return "frontend_terminal_build"
+    return None
+
+
+def _has_any(text: str, needles: tuple[str, ...]) -> bool:
+    return any(needle in text for needle in needles)
+
+
+def _clip_summary(summary: str, limit: int = 96) -> str:
+    clean = " ".join(summary.split())
+    if len(clean) <= limit:
+        return clean
+    return clean[: limit - 3] + "..."

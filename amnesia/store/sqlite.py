@@ -24,7 +24,7 @@ from amnesia.models import (
 
 class SQLiteStore:
     def __init__(self, dsn: str):
-        self.db_path = self._extract_path(dsn)
+        self.db_path = _extract_path(dsn)
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
@@ -400,11 +400,12 @@ class SQLiteStore:
         since_ts: str | None = None,
         limit: int = 5000,
     ) -> list[Event]:
+        normalized_since = _normalize_since_ts(since_ts)
         params: list[object] = [source]
         where = "source = ?"
-        if since_ts:
+        if normalized_since:
             where += " AND ts >= ?"
-            params.append(since_ts)
+            params.append(normalized_since)
         params.append(max(0, limit))
         rows = self.conn.execute(
             f"""
@@ -414,8 +415,7 @@ class SQLiteStore:
             WHERE {where}
             ORDER BY ts DESC
             LIMIT ?
-            """
-            ,
+            """,
             tuple(params),
         ).fetchall()
 
@@ -424,7 +424,7 @@ class SQLiteStore:
             events.append(
                 Event(
                     event_id=row["event_id"],
-                    ts=datetime.fromisoformat(row["ts"]),
+                    ts=_parse_event_ts(row["ts"]),
                     source=row["source"],
                     session_id=row["session_id"],
                     turn_index=int(row["turn_index"]),
@@ -439,11 +439,29 @@ class SQLiteStore:
             )
         return events
 
-    @staticmethod
-    def _extract_path(dsn: str) -> str:
-        if not dsn.startswith("sqlite:///"):
-            raise ValueError(f"Unsupported sqlite dsn: {dsn}")
-        return dsn.removeprefix("sqlite:///")
+
+def _normalize_since_ts(since_ts: str | None) -> str | None:
+    if since_ts is None or not str(since_ts).strip():
+        return None
+    raw = str(since_ts).strip().replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(raw)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC).isoformat(timespec="seconds")
+
+
+def _parse_event_ts(value: str) -> datetime:
+    raw = value.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(raw)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+def _extract_path(dsn: str) -> str:
+    if not dsn.startswith("sqlite:///"):
+        raise ValueError(f"Unsupported sqlite dsn: {dsn}")
+    return dsn.removeprefix("sqlite:///")
 
 
 def to_json(value: object) -> str | None:

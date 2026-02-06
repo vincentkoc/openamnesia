@@ -23,5 +23,4 @@ class BaseOutput:
 
 
 class SourceOperation(Protocol):
-    def run(self, input_data: BaseInput) -> BaseOutput:
-        ...
+    def run(self, input_data: BaseInput) -> BaseOutput: ...

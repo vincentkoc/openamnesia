@@ -79,8 +79,7 @@ class LiteLLMProvider:
         # Attempt 2: fallback without response_format for providers/models that
         # ignore JSON mode on chat completions.
         fallback_system = (
-            f"{system}\n"
-            "Return ONLY one JSON object matching the schema. No markdown, no prose."
+            f"{system}\nReturn ONLY one JSON object matching the schema. No markdown, no prose."
         )
         fallback_response = self._completion_with_retries(
             system=fallback_system,
