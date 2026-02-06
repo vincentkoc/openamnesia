@@ -1,14 +1,35 @@
 from __future__ import annotations
 
+from importlib import import_module
 from pathlib import Path
 
 from amnesia.config import SourceConfig
 from amnesia.connectors.base import ConnectorSettings, SourceConnector
 from amnesia.connectors.codex import CodexConnector
 from amnesia.connectors.cursor import CursorConnector
+from amnesia.connectors.file_drop import FileDropConnector
 from amnesia.connectors.imessage import IMessageConnector
 from amnesia.connectors.terminal import TerminalConnector
 from amnesia.sources.registry import validate_source_module_structure
+
+
+def _connector_from_source_name(source_name: str):
+    builtins: dict[str, type] = {
+        "cursor": CursorConnector,
+        "codex": CodexConnector,
+        "terminal": TerminalConnector,
+        "imessage": IMessageConnector,
+    }
+    if source_name in builtins:
+        return builtins[source_name]
+
+    module_name = f"amnesia.connectors.{source_name}"
+    class_name = "".join(part.capitalize() for part in source_name.split("_")) + "Connector"
+    try:
+        module = import_module(module_name)
+    except ImportError:
+        return FileDropConnector
+    return getattr(module, class_name, FileDropConnector)
 
 
 def build_connectors(sources: list[SourceConfig]) -> list[SourceConnector]:
@@ -27,16 +48,7 @@ def build_connectors(sources: list[SourceConfig]) -> list[SourceConnector]:
             options=source.options,
         )
 
-        match source.name:
-            case "cursor":
-                connectors.append(CursorConnector(settings=settings))
-            case "codex":
-                connectors.append(CodexConnector(settings=settings))
-            case "terminal":
-                connectors.append(TerminalConnector(settings=settings))
-            case "imessage":
-                connectors.append(IMessageConnector(settings=settings))
-            case _:
-                connectors.append(TerminalConnector(settings=settings))
+        connector_cls = _connector_from_source_name(source.name)
+        connectors.append(connector_cls(settings=settings))
 
     return connectors

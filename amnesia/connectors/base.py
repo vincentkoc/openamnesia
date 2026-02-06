@@ -5,6 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+from amnesia.api_objects.types import SourceState, SourceStats
+
 
 @dataclass(slots=True)
 class SourceRecord:
@@ -29,12 +31,34 @@ class SourcePollStats:
     groups_seen: int = 0
     item_counts_by_group: dict[str, int] = field(default_factory=dict)
 
+    @classmethod
+    def from_source_stats(cls, stats: SourceStats) -> SourcePollStats:
+        return cls(
+            items_seen=stats.items_seen,
+            groups_seen=stats.groups_seen,
+            item_counts_by_group=dict(stats.item_counts_by_group),
+        )
+
 
 @dataclass(slots=True)
 class SourcePollResult:
     records: list[SourceRecord]
     state: dict[str, Any]
     stats: SourcePollStats = field(default_factory=SourcePollStats)
+
+    @classmethod
+    def from_contracts(
+        cls,
+        *,
+        records: list[SourceRecord],
+        state: SourceState,
+        stats: SourceStats,
+    ) -> SourcePollResult:
+        return cls(
+            records=records,
+            state=state.to_dict(),
+            stats=SourcePollStats.from_source_stats(stats),
+        )
 
 
 class SourceConnector(Protocol):

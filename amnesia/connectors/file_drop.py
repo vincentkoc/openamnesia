@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from amnesia.api_objects.types import SourceState, SourceStats
 from amnesia.connectors.base import (
     ConnectorSettings,
     SourcePollResult,
-    SourcePollStats,
     SourceRecord,
 )
 
@@ -25,19 +25,23 @@ class FileDropConnector:
 
     def poll(self, state: dict) -> SourcePollResult:
         records: list[SourceRecord] = []
-        new_state = dict(state)
+        new_state = SourceState(values=dict(state))
         group_counter: Counter[str] = Counter()
 
         root = self.settings.root_path
         if not root.exists():
-            return SourcePollResult(records=records, state=new_state, stats=SourcePollStats())
+            return SourcePollResult.from_contracts(
+                records=records,
+                state=new_state,
+                stats=SourceStats(),
+            )
 
         for file_path in sorted(root.glob(self.settings.pattern)):
             if not file_path.is_file():
                 continue
 
             file_key = str(file_path.resolve())
-            last_line = int(new_state.get(file_key, 0))
+            last_line = int(new_state.values.get(file_key, 0))
             processed = 0
 
             with file_path.open("r", encoding="utf-8", errors="replace") as fh:
@@ -52,14 +56,14 @@ class FileDropConnector:
                     processed = idx
 
             if processed > 0:
-                new_state[file_key] = processed
+                new_state.values[file_key] = processed
 
-        stats = SourcePollStats(
+        stats = SourceStats(
             items_seen=len(records),
             groups_seen=len(group_counter),
             item_counts_by_group=dict(group_counter),
         )
-        return SourcePollResult(records=records, state=new_state, stats=stats)
+        return SourcePollResult.from_contracts(records=records, state=new_state, stats=stats)
 
     def _parse_line(self, file_path: Path, line_number: int, line: str) -> SourceRecord | None:
         if not line.strip():
