@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* PostHog-inspired warm cream palette */
+  --color-cream-50: #FAF9F6;
+  --color-cream-100: #EEEDE9;
+  --color-cream-200: #E0DED8;
+  --color-cream-300: #D5D3CC;
+  --color-cream-400: #B8B5AD;
+  --color-cream-500: #9B978E;
+
+  --color-ink-50: #71706E;
+  --color-ink-100: #5C5A57;
+  --color-ink-200: #3D3B37;
+  --color-ink-300: #2A2825;
+  --color-ink-400: #1D1B18;
+  --color-ink-500: #151210;
+
+  --color-accent-50: #EEF2FF;
+  --color-accent-100: #E0E7FF;
+  --color-accent-200: #C7D2FE;
+  --color-accent-400: #818CF8;
+  --color-accent-500: #6366F1;
+  --color-accent-600: #4F46E5;
+  --color-accent-700: #4338CA;
+
+  --color-success-500: #059669;
+  --color-success-100: #D1FAE5;
+  --color-warning-500: #D97706;
+  --color-warning-100: #FEF3C7;
+  --color-error-500: #DC2626;
+  --color-error-100: #FEE2E2;
+
+  --color-source-imessage: #34D399;
+  --color-source-cursor: #60A5FA;
+  --color-source-codex: #F472B6;
+  --color-source-terminal: #FBBF24;
+  --color-source-slack: #A78BFA;
+  --color-source-discord: #818CF8;
+}
+
+body {
+  background-color: var(--color-cream-100);
+  color: var(--color-ink-400);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-cream-300); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-cream-400); }
+
+/* Custom utility for the "stream pulse" animation */
+@keyframes pulse-stream {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-pulse-stream {
+  animation: pulse-stream 2s ease-in-out infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
