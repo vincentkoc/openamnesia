@@ -15,9 +15,17 @@ sources:
     pattern: "*.log"
 
 store:
-  backend: sqlite
+  backend: sqlite # sqlite | memory
   dsn: sqlite:///./data/amnesia.db
 
 daemon:
   poll_interval_seconds: 5
   state_path: ./.amnesia_state.yaml
+
+exports:
+  enabled: true
+  daily_dir: ./exports/daily
+  skills_dir: ./exports/skills
+
+hooks:
+  plugins: []
