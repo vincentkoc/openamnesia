@@ -15,10 +15,12 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",
+  "ruff>=0.14.0",
+  "pre-commit>=3.8.0",
 ]
 
 [project.scripts]
-amnesia-daemon = "amnesia_daemon:main"
+amnesia-daemon = "amnesia.daemon:main"
 
 [tool.setuptools]
 packages = ["amnesia", "amnesia.connectors", "amnesia.pipeline", "amnesia.store", "amnesia.exports"]

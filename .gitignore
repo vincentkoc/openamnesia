@@ -212,3 +212,6 @@ __pycache__/
 *.pyc
 .amnesia_state.yaml
 data/
+
+# OpenAmnesia runtime exports
+exports/

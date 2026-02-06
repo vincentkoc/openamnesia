@@ -8,6 +8,7 @@ Local-first ingestion service that converts tool/session exhaust into normalized
   - `cursor` (`.jsonl` file-drop)
   - `codex` (`.jsonl` file-drop)
   - `terminal` (`.log` file-drop)
+- Source operational status tracking (`idle`, `ingesting`, `error`) persisted in DB
 - Hookable pipeline stages:
   - normalize -> sessionize -> momentize -> extract -> skill_mine -> optimize
 - Config-driven plugin loading for hooks (`module.path:function_name`)
@@ -48,7 +49,12 @@ amnesia-daemon --config config.yaml --once
 amnesia-daemon --config config.yaml
 ```
 
-4. Generate default config if needed:
+4. Show source statuses:
+```bash
+amnesia-daemon --config config.yaml --sources
+```
+
+5. Generate default config if needed:
 ```bash
 amnesia-daemon --init-config --config config.yaml
 ```

@@ -1,0 +1,28 @@
+exclude = [
+  ".git",
+  ".venv",
+  "__pycache__",
+  "build",
+  "dist",
+  "openamnesia.egg-info",
+  "data",
+  "exports",
+]
+
+line-length = 100
+indent-width = 4
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "I", "UP"]
+ignore = []
+
+[lint.isort]
+known-first-party = ["amnesia"]
+combine-as-imports = true
+
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
