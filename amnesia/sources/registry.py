@@ -5,6 +5,7 @@ from __future__ import annotations
 import pkgutil
 from dataclasses import dataclass
 from importlib import import_module
+from pathlib import Path
 
 
 @dataclass(slots=True)
@@ -28,7 +29,24 @@ SOURCE_MODULE_SPECS = {
 }
 
 
+def register_source_module(source_name: str) -> None:
+    module_path = f"amnesia.sources.{source_name}"
+    SOURCE_MODULE_SPECS[source_name] = SourceModuleSpec(name=source_name, module_path=module_path)
+
+
+def discover_local_source_modules() -> None:
+    root = Path(__file__).resolve().parent
+    for child in root.iterdir():
+        if child.name.startswith("_") or child.name == "__pycache__":
+            continue
+        if not child.is_dir():
+            continue
+        if (child / "__init__.py").exists():
+            register_source_module(child.name)
+
+
 def validate_source_module_structure(source_name: str) -> None:
+    discover_local_source_modules()
     spec = SOURCE_MODULE_SPECS.get(source_name)
     if spec is None:
         return
