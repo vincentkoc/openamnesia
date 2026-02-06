@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+from collections import Counter
 import hashlib
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from amnesia.connectors.base import ConnectorSettings, SourceRecord
+from amnesia.connectors.base import (
+    ConnectorSettings,
+    SourcePollResult,
+    SourcePollStats,
+    SourceRecord,
+)
 
 
 @dataclass(slots=True)
@@ -17,13 +23,14 @@ class FileDropConnector:
     def source_name(self) -> str:
         return self.settings.source_name
 
-    def poll(self, state: dict) -> tuple[list[SourceRecord], dict]:
+    def poll(self, state: dict) -> SourcePollResult:
         records: list[SourceRecord] = []
         new_state = dict(state)
+        group_counter: Counter[str] = Counter()
 
         root = self.settings.root_path
         if not root.exists():
-            return records, new_state
+            return SourcePollResult(records=records, state=new_state, stats=SourcePollStats())
 
         for file_path in sorted(root.glob(self.settings.pattern)):
             if not file_path.is_file():
@@ -40,12 +47,19 @@ class FileDropConnector:
                     record = self._parse_line(file_path, idx, line.rstrip("\n"))
                     if record is not None:
                         records.append(record)
+                        group_key = record.group_hint or record.session_hint or file_key
+                        group_counter[group_key] += 1
                     processed = idx
 
             if processed > 0:
                 new_state[file_key] = processed
 
-        return records, new_state
+        stats = SourcePollStats(
+            items_seen=len(records),
+            groups_seen=len(group_counter),
+            item_counts_by_group=dict(group_counter),
+        )
+        return SourcePollResult(records=records, state=new_state, stats=stats)
 
     def _parse_line(self, file_path: Path, line_number: int, line: str) -> SourceRecord | None:
         if not line.strip():
@@ -60,6 +74,7 @@ class FileDropConnector:
 
         ts = None
         session_hint = None
+        group_hint = None
         actor = "user"
         content = line
         tool_name = None
@@ -72,6 +87,7 @@ class FileDropConnector:
             content = str(parsed.get("content", line))
             actor = str(parsed.get("actor", "user"))
             session_hint = parsed.get("session_id")
+            group_hint = parsed.get("group_id") or parsed.get("chat_id")
             tool_name = parsed.get("tool_name")
             tool_status = parsed.get("tool_status")
             tool_args_json = parsed.get("tool_args")
@@ -89,6 +105,7 @@ class FileDropConnector:
             content=content,
             ts=ts,
             session_hint=session_hint,
+            group_hint=group_hint,
             actor=actor,
             tool_name=tool_name,
             tool_status=tool_status,

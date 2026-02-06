@@ -40,12 +40,18 @@ class HookConfig:
 
 
 @dataclass(slots=True)
+class LoggingConfig:
+    level: str = "INFO"
+
+
+@dataclass(slots=True)
 class AppConfig:
     sources: list[SourceConfig] = field(default_factory=list)
     store: StoreConfig = field(default_factory=StoreConfig)
     daemon: DaemonConfig = field(default_factory=DaemonConfig)
     exports: ExportConfig = field(default_factory=ExportConfig)
     hooks: HookConfig = field(default_factory=HookConfig)
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
 
     @staticmethod
     def default() -> AppConfig:
@@ -84,6 +90,7 @@ def load_config(path: str | Path | None) -> AppConfig:
     daemon_raw = raw.get("daemon", {})
     exports_raw = raw.get("exports", {})
     hooks_raw = raw.get("hooks", {})
+    logging_raw = raw.get("logging", {})
 
     return AppConfig(
         sources=source_cfgs or AppConfig.default().sources,
@@ -102,6 +109,9 @@ def load_config(path: str | Path | None) -> AppConfig:
         ),
         hooks=HookConfig(
             plugins=list(hooks_raw.get("plugins", [])),
+        ),
+        logging=LoggingConfig(
+            level=str(logging_raw.get("level", "INFO")),
         ),
     )
 
@@ -130,6 +140,9 @@ def dump_default_config(path: str | Path) -> None:
         },
         "hooks": {
             "plugins": cfg.hooks.plugins,
+        },
+        "logging": {
+            "level": cfg.logging.level,
         },
     }
     out = Path(path)

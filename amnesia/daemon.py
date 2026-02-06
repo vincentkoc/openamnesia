@@ -10,8 +10,10 @@ from pathlib import Path
 
 import yaml
 
+from amnesia.api_objects.types import IngestionRunSummary, SourceIngestionSummary
 from amnesia.config import AppConfig, dump_default_config, load_config
 from amnesia.connectors.registry import build_connectors
+from amnesia.constants import STATUS_ERROR, STATUS_IDLE, STATUS_INGESTING, STATUS_NEVER_RUN
 from amnesia.exports.md_daily import export_daily_moments
 from amnesia.exports.skill_yaml import export_skills_yaml
 from amnesia.models import IngestAudit, SourceStatus, utc_now
@@ -25,6 +27,8 @@ from amnesia.pipeline.plugin_loader import load_plugins
 from amnesia.pipeline.sessionize import sessionize_events
 from amnesia.pipeline.skill_mine import mine_skill_candidates
 from amnesia.store.factory import build_store
+from amnesia.utils.display.terminal import print_run_summary, print_run_summary_json
+from amnesia.utils.logging import debug_event, get_logger, setup_logging
 
 
 @dataclass(slots=True)
@@ -34,6 +38,14 @@ class RuntimeState:
     @staticmethod
     def empty() -> RuntimeState:
         return RuntimeState(per_source={})
+
+
+@dataclass(slots=True)
+class ProcessCounts:
+    inserted_events: int
+    inserted_sessions: int
+    inserted_moments: int
+    inserted_skills: int
 
 
 def load_state(path: Path) -> RuntimeState:
@@ -61,15 +73,25 @@ class Daemon:
         self.hooks = HookRegistry()
         load_plugins(config.hooks.plugins, self.hooks)
         self.running = True
+        self.logger = get_logger("amnesia.daemon")
 
     def stop(self, *_args: object) -> None:
         self.running = False
 
-    def run(self, once: bool = False) -> None:
+    def run(self, once: bool = False) -> IngestionRunSummary:
         self.store.init_schema()
+        started = utc_now()
+        cycle_summary: list[SourceIngestionSummary] = []
+
+        self.logger.info(
+            "Starting ingestion run (once=%s, sources=%s)",
+            once,
+            [connector.source_name for connector in self.connectors],
+        )
 
         while self.running:
             total_records = 0
+            cycle_summary = []
 
             for connector in self.connectors:
                 source_name = connector.source_name
@@ -77,34 +99,69 @@ class Daemon:
                 now = utc_now()
 
                 try:
-                    records, new_source_state = connector.poll(source_state)
-                    self.state.per_source[source_name] = new_source_state
+                    poll_result = connector.poll(source_state)
+                    records = poll_result.records
+                    self.state.per_source[source_name] = poll_result.state
                     total_records += len(records)
 
                     if records:
-                        self._process_records(source_name, records)
+                        counts = self._process_records(source_name, records)
+                        status = STATUS_INGESTING
+                    else:
+                        counts = ProcessCounts(0, 0, 0, 0)
+                        status = STATUS_IDLE
+
+                    summary = SourceIngestionSummary(
+                        source=source_name,
+                        status=status,
+                        records_seen=len(records),
+                        records_ingested=len(records),
+                        inserted_events=counts.inserted_events,
+                        inserted_sessions=counts.inserted_sessions,
+                        inserted_moments=counts.inserted_moments,
+                        inserted_skills=counts.inserted_skills,
+                    )
+                    cycle_summary.append(summary)
 
                     self.store.save_source_status(
                         SourceStatus(
                             source=source_name,
-                            status="ingesting" if records else "idle",
+                            status=status,
                             last_poll_ts=now,
                             records_seen=len(records),
                             records_ingested=len(records),
                             error_message=None,
                         )
                     )
+                    debug_event(
+                        self.logger,
+                        "source_polled",
+                        source=source_name,
+                        status=status,
+                        records=len(records),
+                        inserted_events=counts.inserted_events,
+                    )
                 except Exception as exc:
+                    cycle_summary.append(
+                        SourceIngestionSummary(
+                            source=source_name,
+                            status=STATUS_ERROR,
+                            records_seen=0,
+                            records_ingested=0,
+                            error_message=str(exc),
+                        )
+                    )
                     self.store.save_source_status(
                         SourceStatus(
                             source=source_name,
-                            status="error",
+                            status=STATUS_ERROR,
                             last_poll_ts=now,
                             records_seen=0,
                             records_ingested=0,
                             error_message=str(exc),
                         )
                     )
+                    self.logger.exception("Connector failure for source=%s", source_name)
 
             save_state(self.state_path, self.state)
 
@@ -112,9 +169,30 @@ class Daemon:
                 break
 
             if total_records == 0:
+                self.logger.debug(
+                    "No new records. Sleeping for %ss", self.config.daemon.poll_interval_seconds
+                )
                 time.sleep(self.config.daemon.poll_interval_seconds)
+            else:
+                self.logger.info("Processed %s records across sources", total_records)
 
         self.store.close()
+        ended = utc_now()
+        summary = IngestionRunSummary(
+            started_at=started,
+            ended_at=ended,
+            once=once,
+            source_summaries=cycle_summary,
+        )
+        self.logger.info(
+            "Ingestion finished: records_seen=%s events=%s sessions=%s moments=%s skills=%s",
+            summary.total_records_seen,
+            summary.total_events,
+            summary.total_sessions,
+            summary.total_moments,
+            summary.total_skills,
+        )
+        return summary
 
     def print_source_status(self) -> None:
         self.store.init_schema()
@@ -130,11 +208,11 @@ class Daemon:
 
         for source in configured:
             if source not in known:
-                print(f"{source:10} status=never-run")
+                print(f"{source:10} status={STATUS_NEVER_RUN}")
 
         self.store.close()
 
-    def _process_records(self, source_name: str, records: list) -> None:
+    def _process_records(self, source_name: str, records: list) -> ProcessCounts:
         ctx = PipelineContext()
         ctx.derived["records"] = records
 
@@ -178,6 +256,13 @@ class Daemon:
             )
         )
 
+        return ProcessCounts(
+            inserted_events=inserted_events,
+            inserted_sessions=inserted_sessions,
+            inserted_moments=inserted_moments,
+            inserted_skills=inserted_skills,
+        )
+
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Amnesia local ingestion daemon")
@@ -185,6 +270,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--init-config", action="store_true", help="Write default config and exit")
     parser.add_argument("--once", action="store_true", help="Run one ingestion pass and exit")
     parser.add_argument("--sources", action="store_true", help="Print source statuses and exit")
+    parser.add_argument("--log-level", help="Override log level (DEBUG, INFO, WARNING, ERROR)")
+    parser.add_argument("--json-summary", action="store_true", help="Print run summary as JSON")
     return parser.parse_args(argv)
 
 
@@ -197,6 +284,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     config = load_config(args.config)
+    setup_logging(level=args.log_level or config.logging.level)
     daemon = Daemon(config)
 
     if args.sources:
@@ -206,7 +294,14 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGINT, daemon.stop)
     signal.signal(signal.SIGTERM, daemon.stop)
 
-    daemon.run(once=args.once)
+    summary = daemon.run(once=args.once)
+
+    if args.once:
+        if args.json_summary:
+            print_run_summary_json(summary)
+        else:
+            print_run_summary(summary)
+
     return 0
 
 
