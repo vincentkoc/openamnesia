@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import pkgutil
 from dataclasses import dataclass
 from importlib import import_module
-import pkgutil
 
 
 @dataclass(slots=True)
