@@ -55,7 +55,7 @@ class ClaudeConnector(FileDropConnector):
             content = self._extract_text(content_items)
             ts = self._parse_ts_value(parsed.get("timestamp"))
             session_hint = parsed.get("sessionId") or file_path.stem
-            group_hint = parsed.get("cwd") or session_hint
+            group_hint = _normalize_group(parsed.get("cwd")) or session_hint
             metadata = {
                 "source_format": "claude_project",
                 "cwd": parsed.get("cwd"),
@@ -87,7 +87,6 @@ class ClaudeConnector(FileDropConnector):
             )
 
         return None
-
     def _build_record(
         self,
         *,
@@ -213,3 +212,12 @@ class ClaudeConnector(FileDropConnector):
                 return parsed.replace(tzinfo=UTC)
             return parsed.astimezone(UTC)
         return None
+
+
+def _normalize_group(value: Any) -> str | None:
+    if not value:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    return raw.rstrip("/").split("/")[-1] or raw

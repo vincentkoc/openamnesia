@@ -41,6 +41,7 @@ class ExportConfig:
     enabled: bool = True
     daily_dir: str = "./exports/daily"
     skills_dir: str = "./exports/skills"
+    memory: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -134,6 +135,7 @@ def load_config(path: str | Path | None) -> AppConfig:
             enabled=bool(exports_raw.get("enabled", True)),
             daily_dir=exports_raw.get("daily_dir", "./exports/daily"),
             skills_dir=exports_raw.get("skills_dir", "./exports/skills"),
+            memory=dict(exports_raw.get("memory", {})),
         ),
         hooks=HookConfig(
             plugins=list(hooks_raw.get("plugins", [])),
@@ -174,6 +176,7 @@ def dump_default_config(path: str | Path) -> None:
             "enabled": cfg.exports.enabled,
             "daily_dir": cfg.exports.daily_dir,
             "skills_dir": cfg.exports.skills_dir,
+            "memory": cfg.exports.memory,
         },
         "hooks": {
             "plugins": cfg.hooks.plugins,

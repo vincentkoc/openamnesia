@@ -7,6 +7,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import PurePath
 
 from amnesia.models import EntityMention, EntityRollup, Event
 
@@ -31,6 +32,27 @@ PLACE_TERMS = {
     "tokyo",
     "rise",
     "barclays",
+}
+
+GENERIC_PROJECT_PREFIXES = {
+    "users",
+    "user",
+    "home",
+    "git",
+    "library",
+    "documents",
+    "downloads",
+    "desktop",
+    "tmp",
+}
+
+CODE_PATH_PREFIXES = {
+    "src",
+    "tests",
+    "sdks",
+    "lib",
+    "apps",
+    "packages",
 }
 
 
@@ -102,10 +124,16 @@ def _extract_from_event(event: Event) -> list[EntityMention]:
         project = next((group for group in match.groups() if group), None)
         if project is None:
             continue
-        low_project = project.lower()
-        if low_project.startswith("http") or "." in low_project:
+        normalized = _normalize_project(project)
+        if not normalized:
             continue
-        mentions.append(_make_mention(event, "project", project, confidence=0.75))
+        mentions.append(_make_mention(event, "project", normalized, confidence=0.75))
+
+    cwd = event.meta_json.get("cwd")
+    if isinstance(cwd, str) and cwd.strip():
+        derived = _project_from_cwd(cwd)
+        if derived:
+            mentions.append(_make_mention(event, "project", derived, confidence=0.85))
 
     # dedupe within event
     unique: dict[tuple[str, str], EntityMention] = {}
@@ -148,3 +176,30 @@ def _bucket_start(ts: datetime, granularity: str) -> datetime:
 
 def _stable_id(seed: str) -> str:
     return hashlib.sha256(seed.encode("utf-8")).hexdigest()
+
+
+def _normalize_project(value: str) -> str | None:
+    low = value.lower()
+    if low.startswith("http") or "." in low:
+        return None
+    parts = [part for part in value.split("/") if part]
+    if not parts:
+        return None
+    if parts[0].lower() in GENERIC_PROJECT_PREFIXES:
+        return None
+    if parts[0].lower() in CODE_PATH_PREFIXES and len(parts) >= 2:
+        return parts[1]
+    if len(parts) >= 2 and parts[1].lower() in CODE_PATH_PREFIXES:
+        return parts[0]
+    return value
+
+
+def _project_from_cwd(cwd: str) -> str | None:
+    try:
+        path = PurePath(cwd)
+    except Exception:
+        return None
+    name = path.name
+    if not name or name.lower() in GENERIC_PROJECT_PREFIXES:
+        return None
+    return name

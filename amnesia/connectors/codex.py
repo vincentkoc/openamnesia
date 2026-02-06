@@ -13,6 +13,7 @@ from amnesia.connectors.file_drop import FileDropConnector
 class CodexConnector(FileDropConnector):
     settings: ConnectorSettings
     _session_groups: dict[str, str] = field(default_factory=dict)
+    _file_groups: dict[str, str] = field(default_factory=dict)
 
     def _parse_line(self, file_path, line_number, line):
         if not line.strip():
@@ -52,11 +53,13 @@ class CodexConnector(FileDropConnector):
             payload = parsed.get("payload") or {}
             if isinstance(payload, dict):
                 session_id = payload.get("id")
-                group = None
+                group = payload.get("cwd")
                 git = payload.get("git") if isinstance(payload.get("git"), dict) else None
-                if git:
+                if not group and git:
                     group = git.get("repository_url") or git.get("branch")
-                group = group or payload.get("cwd")
+                group = _normalize_group(group)
+                if group:
+                    self._file_groups[str(file_path)] = str(group)
                 if session_id and group:
                     self._session_groups[str(session_id)] = str(group)
             return None
@@ -68,6 +71,8 @@ class CodexConnector(FileDropConnector):
                 ts = self._parse_ts_value(parsed.get("timestamp") or payload.get("timestamp"))
                 session_hint = payload.get("id") or file_path.stem
                 group_hint = self._session_groups.get(str(session_hint))
+                if group_hint is None:
+                    group_hint = self._file_groups.get(str(file_path))
 
                 if payload_type == "message":
                     role = payload.get("role") or "assistant"
@@ -231,3 +236,17 @@ class CodexConnector(FileDropConnector):
             return int(tail.split()[0])
         except (IndexError, ValueError):
             return None
+
+
+def _normalize_group(value: Any) -> str | None:
+    if not value:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    if raw.startswith("http"):
+        tail = raw.rstrip("/").split("/")[-1]
+        if tail.endswith(".git"):
+            tail = tail[: -4]
+        return tail or raw
+    return raw.rstrip("/").split("/")[-1] or raw
