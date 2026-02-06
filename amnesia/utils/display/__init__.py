@@ -1,2 +1,1 @@
 """Terminal display helpers."""
-
