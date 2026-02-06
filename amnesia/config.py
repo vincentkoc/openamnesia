@@ -13,6 +13,9 @@ class SourceConfig:
     enabled: bool = True
     path: str = ""
     pattern: str = "*.log"
+    options: dict[str, Any] = field(default_factory=dict)
+    include_contains: list[str] = field(default_factory=list)
+    exclude_contains: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -60,6 +63,16 @@ class AppConfig:
                 SourceConfig(name="cursor", path="./ingest/cursor", pattern="*.jsonl"),
                 SourceConfig(name="codex", path="./ingest/codex", pattern="*.jsonl"),
                 SourceConfig(name="terminal", path="./ingest/terminal", pattern="*.log"),
+                SourceConfig(
+                    name="imessage",
+                    path="./ingest/imessage",
+                    pattern="*.jsonl",
+                    options={
+                        "mode": "sqlite",
+                        "db_path": "~/Library/Messages/chat.db",
+                        "limit": 500,
+                    },
+                ),
             ]
         )
 
@@ -83,6 +96,9 @@ def load_config(path: str | Path | None) -> AppConfig:
                 enabled=item.get("enabled", True),
                 path=item.get("path", ""),
                 pattern=item.get("pattern", "*.log"),
+                options=dict(item.get("options", {})),
+                include_contains=list(item.get("include_contains", [])),
+                exclude_contains=list(item.get("exclude_contains", [])),
             )
         )
 
@@ -125,6 +141,9 @@ def dump_default_config(path: str | Path) -> None:
                 "enabled": source.enabled,
                 "path": source.path,
                 "pattern": source.pattern,
+                "options": source.options,
+                "include_contains": source.include_contains,
+                "exclude_contains": source.exclude_contains,
             }
             for source in cfg.sources
         ],

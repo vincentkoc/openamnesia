@@ -13,6 +13,9 @@ class SourceIngestionSummary:
     status: str
     records_seen: int
     records_ingested: int
+    records_filtered: int = 0
+    groups_seen: int = 0
+    group_item_counts: dict[str, int] = field(default_factory=dict)
     inserted_events: int = 0
     inserted_sessions: int = 0
     inserted_moments: int = 0
@@ -43,6 +46,14 @@ class IngestionRunSummary:
         return sum(item.records_ingested for item in self.source_summaries)
 
     @property
+    def total_records_filtered(self) -> int:
+        return sum(item.records_filtered for item in self.source_summaries)
+
+    @property
+    def total_groups_seen(self) -> int:
+        return sum(item.groups_seen for item in self.source_summaries)
+
+    @property
     def total_events(self) -> int:
         return sum(item.inserted_events for item in self.source_summaries)
 
@@ -67,6 +78,8 @@ class IngestionRunSummary:
             "totals": {
                 "records_seen": self.total_records_seen,
                 "records_ingested": self.total_records_ingested,
+                "records_filtered": self.total_records_filtered,
+                "groups_seen": self.total_groups_seen,
                 "events": self.total_events,
                 "sessions": self.total_sessions,
                 "moments": self.total_moments,
