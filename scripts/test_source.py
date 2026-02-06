@@ -8,16 +8,21 @@ from typing import Any
 
 import yaml
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
+from amnesia import __version__
 from amnesia.config import SourceConfig, load_config
 from amnesia.connectors.registry import build_connectors
+from amnesia.constants import AUTO_REQUEST_DISK_ACCESS_ON_PERMISSION_ERROR
 from amnesia.filters import (
     SourceFilterPipeline,
     make_exclude_contains_filter,
     make_include_contains_filter,
 )
 from amnesia.internal.events import EventBus
+from amnesia.utils.display.terminal import print_banner
+from amnesia.utils.macos import open_full_disk_access_settings
 
 
 def _load_state(path: Path) -> dict[str, Any]:
@@ -68,16 +73,45 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
+    console = Console()
+    if not args.json:
+        print_banner()
     cfg = load_config(args.config)
 
     source_cfg = next((src for src in cfg.sources if src.name == args.source and src.enabled), None)
     if source_cfg is None:
-        raise SystemExit(f"Source '{args.source}' is not configured and enabled in {args.config}")
+        message = f"Source '{args.source}' is not configured and enabled in {args.config}"
+        if args.json:
+            print(
+                json.dumps({"source": args.source, "error": message}, ensure_ascii=True, indent=2)
+            )
+            return 2
+        console.print(Panel(message, title="Source Error", border_style="red"))
+        return 2
 
     connectors = build_connectors([source_cfg])
     connector = connectors[0]
     if args.source == "imessage" and "mode" not in source_cfg.options:
         source_cfg.options["mode"] = "sqlite"
+
+    if not args.json:
+        mode = str(source_cfg.options.get("mode", "default"))
+        console.print(
+            Panel(
+                "\n".join(
+                    [
+                        f"version={__version__}",
+                        f"source={args.source}",
+                        f"config={args.config}",
+                        f"mode={mode}",
+                        f"reset_state={args.reset_state}",
+                        f"sample={args.sample}",
+                    ]
+                ),
+                title="Source Test Task",
+                border_style="cyan",
+            )
+        )
 
     state_path = Path(args.state_path)
     state_doc = _load_state(state_path)
@@ -93,7 +127,46 @@ def main() -> int:
     )
 
     bus.emit("source.test.started", source=args.source)
-    poll_result = connector.poll(source_state)
+    try:
+        poll_result = connector.poll(source_state)
+    except Exception as exc:
+        bus.emit("source.test.error", source=args.source, error=str(exc))
+        request_attempted = False
+        request_success = False
+        if (
+            args.source == "imessage"
+            and AUTO_REQUEST_DISK_ACCESS_ON_PERMISSION_ERROR
+        ):
+            request_attempted = True
+            request_success = open_full_disk_access_settings()
+
+        payload = {
+            "source": args.source,
+            "error": str(exc),
+            "hint": (
+                "For iMessage on macOS, grant Full Disk Access to your terminal/python app "
+                "or set imessage options.mode=jsonl and ingest exports."
+            ),
+            "disk_access_request_attempted": request_attempted,
+            "disk_access_settings_opened": request_success,
+            "events": recent_events,
+        }
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=True, indent=2))
+            return 2
+
+        console.print(
+            Panel(
+                "[bold]Ingestion failed[/bold]\n"
+                f"{payload['error']}\n\n"
+                f"[dim]{payload['hint']}[/dim]\n"
+                f"[dim]Requested settings open: {request_attempted} "
+                f"(opened={request_success})[/dim]",
+                title=f"Source Error: {args.source}",
+                border_style="red",
+            )
+        )
+        return 2
     pipeline = _build_filter_pipeline(source_cfg)
     filtered_records, dropped = pipeline.apply(poll_result.records)
     bus.emit(
@@ -133,7 +206,6 @@ def main() -> int:
         print(json.dumps(payload, ensure_ascii=True, indent=2))
         return 0
 
-    console = Console()
     console.print(
         f"[bold cyan]Source test:[/bold cyan] {args.source} "
         f"seen={payload['items_seen']} ingested={payload['items_ingested']} "
