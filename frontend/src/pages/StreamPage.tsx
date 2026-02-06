@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Brain, Cpu, Database, Layers, Zap } from "lucide-react";
 import { api } from "../lib/api";
 import { numberFormat } from "../lib/utils";
 import { StatsCard } from "../components/common/StatsCard";
@@ -10,126 +9,107 @@ import { SourceBadge } from "../components/common/SourceBadge";
 import { useState } from "react";
 
 export function StreamPage() {
-  const [sourceFilter, setSourceFilter] = useState<string>("");
+  const [src, setSrc] = useState("");
 
   const { data: stats } = useQuery({ queryKey: ["stats"], queryFn: api.stats });
-  const { data: timeline } = useQuery({
-    queryKey: ["timeline"],
-    queryFn: () => api.timeline({ granularity: "hour" }),
-  });
+  const { data: tl } = useQuery({ queryKey: ["timeline"], queryFn: () => api.timeline({ granularity: "hour" }) });
   const { data: moments } = useQuery({
-    queryKey: ["moments", sourceFilter],
-    queryFn: () => api.moments({ source: sourceFilter || undefined, limit: 30 }),
+    queryKey: ["moments", src],
+    queryFn: () => api.moments({ source: src || undefined, limit: 30 }),
   });
 
   const sources = stats?.sources ?? [];
 
   return (
-    <div className="px-8 py-6">
-      {/* Page header */}
-      <div className="mb-6">
-        <h1 className="text-[22px] font-semibold tracking-tight text-ink-500">
+    <div>
+      {/* Hero — editorial headline */}
+      <div className="accent-strip mb-16 py-12 text-center">
+        <h1 className="font-serif text-[48px] font-normal italic leading-none tracking-tight text-text-0">
           Memory Stream
         </h1>
-        <p className="mt-0.5 text-[13px] text-ink-50">
-          Real-time flow of ingested events, sessions, and moments
+        <p className="mt-3 text-[10px] uppercase tracking-[0.3em] text-text-3">
+          traces &rarr; events &rarr; moments &rarr; skills
         </p>
+
+        {/* Stats strip — big editorial numbers */}
+        <div className="stagger mx-auto mt-10 flex max-w-2xl items-end justify-between border-t border-b border-line/50 py-6">
+          <StatsCard label="events" value={numberFormat(stats?.total_events ?? 0)} />
+          <div className="h-8 w-px bg-line/30" />
+          <StatsCard label="sessions" value={numberFormat(stats?.total_sessions ?? 0)} />
+          <div className="h-8 w-px bg-line/30" />
+          <StatsCard label="moments" value={numberFormat(stats?.total_moments ?? 0)} />
+          <div className="h-8 w-px bg-line/30" />
+          <StatsCard label="skills" value={numberFormat(stats?.total_skills ?? 0)} />
+          <div className="h-8 w-px bg-line/30" />
+          <StatsCard label="24h" value={numberFormat(stats?.recent_events_24h ?? 0)} />
+        </div>
       </div>
 
-      {/* Stats row */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatsCard
-          label="Events"
-          value={numberFormat(stats?.total_events ?? 0)}
-          icon={<Database className="h-4 w-4" />}
-        />
-        <StatsCard
-          label="Sessions"
-          value={numberFormat(stats?.total_sessions ?? 0)}
-          icon={<Layers className="h-4 w-4" />}
-        />
-        <StatsCard
-          label="Moments"
-          value={numberFormat(stats?.total_moments ?? 0)}
-          icon={<Zap className="h-4 w-4" />}
-        />
-        <StatsCard
-          label="Skills"
-          value={numberFormat(stats?.total_skills ?? 0)}
-          icon={<Brain className="h-4 w-4" />}
-        />
-        <StatsCard
-          label="Entities"
-          value={numberFormat(stats?.total_entities ?? 0)}
-          icon={<Cpu className="h-4 w-4" />}
-        />
-        <StatsCard
-          label="24h Events"
-          value={numberFormat(stats?.recent_events_24h ?? 0)}
-          sub="last 24 hours"
-          icon={<Activity className="h-4 w-4" />}
-        />
-      </div>
-
-      {/* Timeline chart */}
-      <div className="mb-6 rounded-xl border border-cream-300 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+      {/* Timeline heat strip */}
+      <div className="mb-12">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-[14px] font-semibold text-ink-400">Activity Timeline</h2>
+          <span className="text-[9px] font-medium uppercase tracking-[0.2em] text-text-3">
+            Activity &mdash; 24h
+          </span>
           <div className="flex items-center gap-2">
             {sources.map((s) => (
               <SourceBadge key={s.source} source={s.source} />
             ))}
           </div>
         </div>
-        <TimelineChart data={timeline?.items ?? []} />
+        <div className="rounded-lg border border-line/40 bg-void-1/50 p-5">
+          <TimelineChart data={tl?.items ?? []} />
+        </div>
       </div>
 
-      {/* Source filter + Moments */}
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-[14px] font-semibold text-ink-400">Moments</h2>
-        <div className="flex items-center gap-1.5">
+      {/* Divider with filter */}
+      <div className="mb-8 flex items-center gap-4">
+        <div className="h-px flex-1 bg-line/30" />
+        <div className="flex items-center gap-1">
           <button
-            onClick={() => setSourceFilter("")}
-            className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors ${
-              !sourceFilter
-                ? "bg-cream-300 text-ink-400"
-                : "text-ink-50 hover:bg-cream-200"
+            onClick={() => setSrc("")}
+            className={`rounded px-2.5 py-1 text-[9px] font-medium uppercase tracking-[0.15em] transition-colors ${
+              !src ? "bg-accent text-void-0" : "text-text-3 hover:text-text-1"
             }`}
           >
-            All
+            all
           </button>
           {sources.map((s) => (
             <button
               key={s.source}
-              onClick={() => setSourceFilter(s.source === sourceFilter ? "" : s.source)}
-              className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors ${
-                sourceFilter === s.source
-                  ? "bg-cream-300 text-ink-400"
-                  : "text-ink-50 hover:bg-cream-200"
+              onClick={() => setSrc(s.source === src ? "" : s.source)}
+              className={`rounded px-2.5 py-1 text-[9px] font-medium uppercase tracking-[0.15em] transition-colors ${
+                src === s.source ? "bg-accent text-void-0" : "text-text-3 hover:text-text-1"
               }`}
             >
               {s.source}
             </button>
           ))}
         </div>
+        <div className="h-px flex-1 bg-line/30" />
       </div>
 
-      {/* Moments list */}
+      {/* Section header */}
+      <div className="mb-6 flex items-baseline justify-between">
+        <h2 className="font-serif text-[24px] italic text-text-0">
+          Moments
+        </h2>
+        <span className="text-[9px] tabular-nums uppercase tracking-[0.2em] text-text-3">
+          {moments?.total ?? 0} total
+        </span>
+      </div>
+
+      {/* Moments trace */}
       {moments && moments.items.length > 0 ? (
-        <div className="grid gap-3">
-          {moments.items.map((m) => (
-            <MomentCard key={m.moment_id} moment={m} />
+        <div className="pl-2">
+          {moments.items.map((m, i) => (
+            <MomentCard key={m.moment_id} moment={m} index={i} />
           ))}
-          {moments.total > moments.items.length && (
-            <div className="py-4 text-center text-[12px] text-ink-50">
-              Showing {moments.items.length} of {moments.total} moments
-            </div>
-          )}
         </div>
       ) : (
         <EmptyState
           title="No moments yet"
-          description="Moments will appear here as the daemon processes ingested events into meaningful segments."
+          description="Moments appear as the daemon processes ingested events."
         />
       )}
     </div>

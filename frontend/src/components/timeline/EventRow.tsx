@@ -1,51 +1,50 @@
-import { cn } from "../../lib/utils";
 import type { Event } from "../../lib/api";
-import { formatTime, truncate } from "../../lib/utils";
-import { SourceBadge } from "../common/SourceBadge";
+import { cn, formatTime, truncate, sourceTextColor } from "../../lib/utils";
 import { Badge } from "../common/Badge";
-import { Bot, User, Wrench } from "lucide-react";
 
-interface EventRowProps {
+interface Props {
   event: Event;
 }
 
-const actorIcon: Record<string, React.ReactNode> = {
-  human: <User className="h-3.5 w-3.5" />,
-  agent: <Bot className="h-3.5 w-3.5" />,
-  tool: <Wrench className="h-3.5 w-3.5" />,
-};
+export function EventRow({ event }: Props) {
+  const isAgent = event.actor === "agent";
+  const isTool = event.actor === "tool";
+  const isError = event.tool_status === "error";
 
-export function EventRow({ event }: EventRowProps) {
   return (
-    <div className="flex items-start gap-3 border-b border-cream-200 px-4 py-3 last:border-b-0 hover:bg-cream-50 transition-colors">
-      {/* Turn index */}
-      <span className="mt-0.5 w-6 shrink-0 text-right font-mono text-[11px] tabular-nums text-cream-500">
+    <div className="group flex gap-3 border-b border-line/50 px-3 py-2.5 last:border-b-0 hover:bg-void-2/50 transition-colors">
+      {/* Line number */}
+      <span className="w-5 shrink-0 text-right text-[10px] tabular-nums text-text-3 pt-0.5">
         {event.turn_index}
       </span>
 
-      {/* Actor icon */}
-      <span className={cn("mt-0.5 shrink-0", event.actor === "human" ? "text-accent-500" : "text-ink-50")}>
-        {actorIcon[event.actor] ?? actorIcon.tool}
+      {/* Diff gutter */}
+      <span className={cn(
+        "w-2 shrink-0 text-[11px] font-bold pt-0.5",
+        isAgent ? "text-accent" : isTool ? "text-warn" : "text-ok",
+      )}>
+        {isAgent ? ">" : isTool ? "|" : "+"}
       </span>
 
       {/* Content */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-[12px] font-medium capitalize text-ink-200">
+        <div className="flex items-center gap-2 text-[10px]">
+          <span className={cn("font-semibold uppercase tracking-wider", sourceTextColor(event.source))}>
             {event.actor}
           </span>
-          <SourceBadge source={event.source} />
-          <span className="text-[11px] text-cream-500">{formatTime(event.ts)}</span>
+          <span className="text-text-3 tabular-nums">{formatTime(event.ts)}</span>
           {event.tool_name && (
-            <Badge variant={event.tool_status === "error" ? "error" : "default"}>
+            <Badge variant={isError ? "err" : "default"}>
               {event.tool_name}
-              {event.tool_status === "error" && " (err)"}
             </Badge>
           )}
         </div>
-        <p className="mt-0.5 whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-ink-100">
-          {truncate(event.content, 500)}
-        </p>
+        <pre className={cn(
+          "mt-1 whitespace-pre-wrap text-[11px] leading-relaxed",
+          isError ? "text-err/80" : "text-text-1",
+        )}>
+          {truncate(event.content, 600)}
+        </pre>
       </div>
     </div>
   );

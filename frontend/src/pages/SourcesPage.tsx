@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { Cpu, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
 import { SourceCard } from "../components/sources/SourceCard";
 import { EmptyState } from "../components/common/EmptyState";
@@ -17,80 +16,77 @@ export function SourcesPage() {
   });
 
   return (
-    <div className="px-8 py-6">
+    <div>
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-12 flex items-end justify-between">
         <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink-500">
+          <h1 className="font-serif text-[48px] font-normal italic leading-none tracking-tight text-text-0">
             Sources
           </h1>
-          <p className="mt-0.5 text-[13px] text-ink-50">
-            Connected data sources and ingestion status
+          <p className="mt-3 text-[10px] uppercase tracking-[0.3em] text-text-3">
+            Connected data sources &amp; ingestion
           </p>
         </div>
         <button
           onClick={() => void refetch()}
           disabled={isFetching}
-          className="flex items-center gap-1.5 rounded-lg border border-cream-300 bg-white px-3 py-2 text-[12px] font-medium text-ink-200 shadow-sm transition-colors hover:bg-cream-50 disabled:opacity-50"
+          className="rounded border border-line/50 px-3 py-1.5 text-[9px] font-medium uppercase tracking-[0.15em] text-text-2 transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
-          Refresh
+          {isFetching ? "syncing..." : "refresh"}
         </button>
       </div>
 
-      {/* Source cards */}
       {sources && sources.items.length > 0 ? (
-        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="stagger mb-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {sources.items.map((src) => (
             <SourceCard key={src.source} source={src} />
           ))}
         </div>
       ) : (
         <EmptyState
-          title="No sources connected"
-          description="Configure sources in config.yaml and run the daemon to start ingesting."
+          title="No sources"
+          description="Configure sources in config.yaml and run the daemon."
         />
       )}
 
-      {/* Audit log */}
+      {/* Audit */}
       {audit && audit.items.length > 0 && (
-        <div className="rounded-xl border border-cream-300 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-          <div className="border-b border-cream-200 px-5 py-3 flex items-center gap-2">
-            <Cpu className="h-4 w-4 text-ink-50" />
-            <h2 className="text-[14px] font-semibold text-ink-400">Recent Ingestion Runs</h2>
+        <div>
+          <div className="mb-4 flex items-center gap-4">
+            <div className="h-px flex-1 bg-line/30" />
+            <span className="text-[9px] uppercase tracking-[0.2em] text-text-3">
+              Recent Runs
+            </span>
+            <div className="h-px flex-1 bg-line/30" />
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-[12px]">
+          <div className="overflow-hidden rounded-lg border border-line/40 bg-void-1/50">
+            <table className="w-full text-left text-[10px]">
               <thead>
-                <tr className="border-b border-cream-200 text-ink-50">
-                  <th className="px-5 py-2.5 font-medium">Time</th>
-                  <th className="px-5 py-2.5 font-medium">Source</th>
-                  <th className="px-5 py-2.5 font-medium text-right">Events</th>
-                  <th className="px-5 py-2.5 font-medium text-right">Sessions</th>
-                  <th className="px-5 py-2.5 font-medium text-right">Moments</th>
-                  <th className="px-5 py-2.5 font-medium text-right">Skills</th>
+                <tr className="border-b border-line/50 text-text-3">
+                  <th className="px-4 py-2.5 font-medium uppercase tracking-[0.15em]">time</th>
+                  <th className="px-4 py-2.5 font-medium uppercase tracking-[0.15em]">source</th>
+                  <th className="px-4 py-2.5 font-medium uppercase tracking-[0.15em] text-right">events</th>
+                  <th className="px-4 py-2.5 font-medium uppercase tracking-[0.15em] text-right">sessions</th>
+                  <th className="px-4 py-2.5 font-medium uppercase tracking-[0.15em] text-right">moments</th>
                 </tr>
               </thead>
               <tbody>
                 {audit.items.map((row, i) => (
-                  <tr key={i} className="border-b border-cream-100 last:border-b-0 hover:bg-cream-50 transition-colors">
-                    <td className="px-5 py-2.5 text-ink-100">
+                  <tr key={i} className="border-b border-line/20 last:border-b-0 transition-colors hover:bg-void-2/30">
+                    <td className="px-4 py-2 tabular-nums text-text-2">
                       {formatDateTime(row.ts as string)}
                     </td>
-                    <td className="px-5 py-2.5 font-medium capitalize text-ink-200">
+                    <td className="px-4 py-2 font-semibold capitalize text-text-1">
                       {row.source as string}
                     </td>
-                    <td className="px-5 py-2.5 text-right tabular-nums text-ink-100">
+                    <td className="px-4 py-2 text-right tabular-nums text-text-1">
                       {numberFormat(row.event_count as number)}
                     </td>
-                    <td className="px-5 py-2.5 text-right tabular-nums text-ink-100">
+                    <td className="px-4 py-2 text-right tabular-nums text-text-2">
                       {numberFormat(row.session_count as number)}
                     </td>
-                    <td className="px-5 py-2.5 text-right tabular-nums text-ink-100">
+                    <td className="px-4 py-2 text-right tabular-nums text-text-2">
                       {numberFormat(row.moment_count as number)}
-                    </td>
-                    <td className="px-5 py-2.5 text-right tabular-nums text-ink-100">
-                      {numberFormat(row.skill_count as number)}
                     </td>
                   </tr>
                 ))}

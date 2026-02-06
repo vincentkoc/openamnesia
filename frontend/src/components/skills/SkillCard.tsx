@@ -1,74 +1,68 @@
-import { Brain, TrendingUp, Clock } from "lucide-react";
 import type { Skill } from "../../lib/api";
 import { Badge } from "../common/Badge";
 import { timeAgo, truncate } from "../../lib/utils";
 
-interface SkillCardProps {
+interface Props {
   skill: Skill;
 }
 
-export function SkillCard({ skill }: SkillCardProps) {
-  const metrics = skill.metrics_json ?? {};
-  const successRate = metrics.success_rate as number | undefined;
-  const avgTurns = metrics.avg_turns as number | undefined;
+export function SkillCard({ skill }: Props) {
+  const m = skill.metrics_json ?? {};
+  const rate = m.success_rate as number | undefined;
+  const turns = m.avg_turns as number | undefined;
+  const count = m.occurrences as number | undefined;
 
   return (
-    <div className="animate-fade-in rounded-xl border border-cream-300 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all hover:border-cream-400 hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+    <div className="glow-border group rounded-lg border border-line bg-void-1 p-4 transition-colors hover:border-line-bright hover:bg-void-2">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-50">
-            <Brain className="h-4 w-4 text-accent-600" />
-          </div>
-          <div>
-            <h3 className="text-[14px] font-semibold text-ink-400">
-              {truncate(skill.name, 40)}
-            </h3>
-            <span className="text-[11px] text-ink-50">
-              {skill.version} &middot; {timeAgo(skill.updated_ts)}
-            </span>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-[13px] font-semibold text-text-0 group-hover:text-accent-bright transition-colors">
+            {truncate(skill.name, 35)}
+          </h3>
+          <div className="mt-0.5 text-[10px] text-text-3">
+            {skill.version} &middot; {timeAgo(skill.updated_ts)}
           </div>
         </div>
-        <Badge
-          variant={
-            skill.status === "validated"
-              ? "success"
-              : skill.status === "candidate"
-                ? "accent"
-                : "default"
-          }
-        >
+        <Badge variant={skill.status === "promoted" ? "ok" : skill.status === "validated" ? "accent" : "default"}>
           {skill.status}
         </Badge>
       </div>
 
-      {/* Metrics row */}
-      <div className="mt-4 flex items-center gap-4">
-        {successRate !== undefined && (
-          <div className="flex items-center gap-1.5">
-            <TrendingUp className="h-3.5 w-3.5 text-success-500" />
-            <span className="text-[12px] font-medium text-ink-200">
-              {(successRate * 100).toFixed(0)}% success
-            </span>
+      {/* Metrics — big numbers */}
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {rate !== undefined && (
+          <div className="rounded-md bg-void-2 px-2 py-1.5 text-center">
+            <div className="text-[14px] font-bold tabular-nums text-ok">
+              {(rate * 100).toFixed(0)}%
+            </div>
+            <div className="text-[9px] uppercase tracking-wider text-text-3">success</div>
           </div>
         )}
-        {avgTurns !== undefined && (
-          <div className="flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5 text-ink-50" />
-            <span className="text-[12px] text-ink-50">
-              {avgTurns.toFixed(1)} avg turns
-            </span>
+        {turns !== undefined && (
+          <div className="rounded-md bg-void-2 px-2 py-1.5 text-center">
+            <div className="text-[14px] font-bold tabular-nums text-text-0">
+              {turns.toFixed(1)}
+            </div>
+            <div className="text-[9px] uppercase tracking-wider text-text-3">avg turns</div>
+          </div>
+        )}
+        {count !== undefined && (
+          <div className="rounded-md bg-void-2 px-2 py-1.5 text-center">
+            <div className="text-[14px] font-bold tabular-nums text-text-0">
+              {count}
+            </div>
+            <div className="text-[9px] uppercase tracking-wider text-text-3">seen</div>
           </div>
         )}
       </div>
 
-      {/* Triggers preview */}
+      {/* Triggers */}
       {skill.trigger_json && (
-        <div className="mt-3 overflow-hidden rounded-lg bg-cream-50 p-2.5">
-          <span className="text-[11px] font-medium text-ink-50">Triggers</span>
-          <p className="mt-0.5 font-mono text-[11px] text-ink-100">
-            {truncate(JSON.stringify(skill.trigger_json), 120)}
-          </p>
+        <div className="mt-3 overflow-hidden rounded-md bg-void-0 px-2.5 py-2">
+          <pre className="text-[10px] text-text-2 leading-relaxed">
+            {truncate(JSON.stringify(skill.trigger_json, null, 1), 140)}
+          </pre>
         </div>
       )}
     </div>

@@ -1,43 +1,46 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-serif: "Georgia", "Times New Roman", serif;
 
-  /* Deep space palette */
-  --color-void-0: #06060A;
-  --color-void-1: #0C0C14;
-  --color-void-2: #13131E;
-  --color-void-3: #1C1C2E;
-  --color-void-4: #26263C;
+  /* Near-black with warmth */
+  --color-void-0: #09090D;
+  --color-void-1: #111116;
+  --color-void-2: #1A1A21;
+  --color-void-3: #242430;
+  --color-grid: rgba(255, 255, 255, 0.035);
 
-  --color-line: #2A2A40;
-  --color-line-bright: #3A3A58;
+  --color-line: #2A2A38;
+  --color-line-bright: #3A3A4C;
 
-  --color-text-0: #EEEAE3;
-  --color-text-1: #A09BA8;
-  --color-text-2: #6B6578;
-  --color-text-3: #4A4558;
+  /* Warm cream whites */
+  --color-text-0: #F0EDE6;
+  --color-text-1: #A8A298;
+  --color-text-2: #6B6560;
+  --color-text-3: #3D3A36;
 
-  --color-accent: #7C5CFC;
-  --color-accent-dim: #5B3FBF;
-  --color-accent-bright: #A78BFA;
-  --color-accent-glow: rgba(124, 92, 252, 0.15);
+  /* Burnt orange accent */
+  --color-accent: #E8562A;
+  --color-accent-hot: #FF6B35;
+  --color-accent-dim: rgba(232, 86, 42, 0.12);
+  --color-accent-glow: rgba(232, 86, 42, 0.25);
 
-  --color-ok: #34D399;
-  --color-ok-dim: rgba(52, 211, 153, 0.12);
-  --color-warn: #FBBF24;
-  --color-warn-dim: rgba(251, 191, 36, 0.12);
-  --color-err: #F87171;
-  --color-err-dim: rgba(248, 113, 113, 0.12);
+  --color-ok: #3DDC84;
+  --color-ok-dim: rgba(61, 220, 132, 0.10);
+  --color-warn: #FFD93D;
+  --color-warn-dim: rgba(255, 217, 61, 0.10);
+  --color-err: #FF5C5C;
+  --color-err-dim: rgba(255, 92, 92, 0.10);
 
-  --color-src-imessage: #34D399;
-  --color-src-cursor: #60A5FA;
-  --color-src-codex: #F472B6;
-  --color-src-terminal: #FBBF24;
-  --color-src-slack: #A78BFA;
-  --color-src-discord: #818CF8;
-  --color-src-claude: #F97316;
+  /* Source palette — vivid against dark */
+  --color-src-cursor: #5B9EFF;
+  --color-src-codex: #FF6BC1;
+  --color-src-terminal: #FFD93D;
+  --color-src-imessage: #3DDC84;
+  --color-src-slack: #B794F6;
+  --color-src-discord: #7B8CFF;
+  --color-src-claude: #FF8C42;
 }
 
 html, body, #root {
@@ -52,73 +55,92 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Noise overlay */
-#root::before {
+/* Grid background — the reference's signature look */
+#root {
+  position: relative;
+  background-image:
+    linear-gradient(var(--color-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
+}
+
+/* Halftone noise overlay — subtle dither texture */
+#root::after {
   content: '';
   position: fixed;
   inset: 0;
   z-index: 9999;
   pointer-events: none;
-  opacity: 0.025;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 256px 256px;
+  opacity: 0.4;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='0.6' fill='%23ffffff' opacity='0.04'/%3E%3Ccircle cx='3' cy='3' r='0.4' fill='%23ffffff' opacity='0.02'/%3E%3C/svg%3E");
+  background-size: 4px 4px;
 }
 
 /* Scrollbar */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-void-4); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--color-line-bright); }
+::-webkit-scrollbar-thumb { background: var(--color-void-3); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-line); }
+
+/* Selection */
+::selection {
+  background: var(--color-accent-glow);
+  color: var(--color-text-0);
+}
 
 /* Animations */
 @keyframes fade-up {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes pulse-glow {
-  0%, 100% { opacity: 0.4; }
+  0%, 100% { opacity: 0.3; }
   50% { opacity: 1; }
 }
-@keyframes slide-in {
-  from { opacity: 0; transform: translateX(-12px); }
-  to { opacity: 1; transform: translateX(0); }
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
 }
 
-.anim-fade-up { animation: fade-up 0.4s ease-out both; }
-.anim-pulse { animation: pulse-glow 2s ease-in-out infinite; }
-.anim-slide { animation: slide-in 0.3s ease-out both; }
+.anim-fade { animation: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-pulse { animation: pulse-glow 2.5s ease-in-out infinite; }
 
-/* Stagger children */
+.stagger > * { animation: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .stagger > :nth-child(1) { animation-delay: 0ms; }
-.stagger > :nth-child(2) { animation-delay: 40ms; }
-.stagger > :nth-child(3) { animation-delay: 80ms; }
-.stagger > :nth-child(4) { animation-delay: 120ms; }
-.stagger > :nth-child(5) { animation-delay: 160ms; }
-.stagger > :nth-child(6) { animation-delay: 200ms; }
-.stagger > :nth-child(7) { animation-delay: 240ms; }
-.stagger > :nth-child(8) { animation-delay: 280ms; }
-.stagger > :nth-child(9) { animation-delay: 320ms; }
-.stagger > :nth-child(10) { animation-delay: 360ms; }
+.stagger > :nth-child(2) { animation-delay: 50ms; }
+.stagger > :nth-child(3) { animation-delay: 100ms; }
+.stagger > :nth-child(4) { animation-delay: 150ms; }
+.stagger > :nth-child(5) { animation-delay: 200ms; }
+.stagger > :nth-child(6) { animation-delay: 250ms; }
+.stagger > :nth-child(7) { animation-delay: 300ms; }
+.stagger > :nth-child(8) { animation-delay: 350ms; }
+.stagger > :nth-child(9) { animation-delay: 400ms; }
+.stagger > :nth-child(10) { animation-delay: 450ms; }
 
-/* Gradient border trick */
-.glow-border {
+/* Accent strip — vertical burn like the reference */
+.accent-strip {
   position: relative;
+  overflow: hidden;
 }
-.glow-border::before {
+.accent-strip::before {
   content: '';
   position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(135deg, var(--color-accent) 0%, transparent 50%, var(--color-accent-dim) 100%);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  opacity: 0;
-  transition: opacity 0.3s;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  background: linear-gradient(180deg, transparent 0%, var(--color-accent) 30%, var(--color-accent-hot) 50%, var(--color-accent) 70%, transparent 100%);
+  opacity: 0.3;
+  transform: translateX(-50%);
 }
-.glow-border:hover::before {
-  opacity: 1;
+
+/* Card hover glow */
+.card {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.card:hover {
+  border-color: var(--color-line-bright);
+  box-shadow: 0 0 0 1px var(--color-line), 0 8px 32px rgba(0,0,0,0.4);
 }
