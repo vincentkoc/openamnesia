@@ -22,7 +22,7 @@ def mine_skill_candidates(moments: list[Moment]) -> list[dict]:
                 "steps": ["collect evidence", "summarize", "publish"],
                 "checks": ["outcome present", "artifacts present"],
                 "metrics": {
-                    "support": count,
+                    "occurrences": count,
                     "success_rate": round(success_rate, 3),
                     "avg_turns": round(avg_turns, 2),
                 },

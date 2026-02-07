@@ -73,6 +73,16 @@ class InMemoryStore:
         items = list(self.skills.values())
         return items[: max(1, limit)]
 
+    def update_skill_status(self, skill_id: str, status: str) -> bool:
+        for key, skill in self.skills.items():
+            if skill.get("skill_id") == skill_id:
+                updated = dict(skill)
+                updated["status"] = status
+                updated["updated_ts"] = datetime.now(UTC).isoformat()
+                self.skills[key] = updated
+                return True
+        return False
+
     def save_source_status(self, status: SourceStatus) -> None:
         self.source_status[status.source] = status
 

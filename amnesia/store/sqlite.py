@@ -179,17 +179,25 @@ class SQLiteStore:
                 {
                     "skill_id": row["skill_id"],
                     "name": row["name"],
-                    "trigger": from_json(row["trigger_json"]),
-                    "steps": from_json(row["steps_json"]),
-                    "checks": from_json(row["checks_json"]),
+                    "trigger_json": from_json(row["trigger_json"]),
+                    "steps_json": from_json(row["steps_json"]),
+                    "checks_json": from_json(row["checks_json"]),
                     "version": row["version"],
                     "status": row["status"],
-                    "metrics": from_json(row["metrics_json"]),
+                    "metrics_json": from_json(row["metrics_json"]),
                     "created_ts": row["created_ts"],
                     "updated_ts": row["updated_ts"],
                 }
             )
         return skills
+
+    def update_skill_status(self, skill_id: str, status: str) -> bool:
+        cur = self.conn.execute(
+            "UPDATE skills SET status = ?, updated_ts = datetime('now') WHERE skill_id = ?",
+            (status, skill_id),
+        )
+        self.conn.commit()
+        return cur.rowcount > 0
 
     def save_source_status(self, status: SourceStatus) -> None:
         self.conn.execute(
