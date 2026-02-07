@@ -1,0 +1,16 @@
+.cache
+.git
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.venv
+__pycache__
+data
+exports
+ingest
+node_modules
+frontend/node_modules
+*.db
+*.db-shm
+*.db-wal
+.env
