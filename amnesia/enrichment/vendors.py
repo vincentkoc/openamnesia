@@ -2,6 +2,13 @@ from __future__ import annotations
 
 import os
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except Exception:
+    pass
+
 
 def get_youcom_api_key() -> str | None:
     value = os.environ.get("YOUCOM_API_KEY", "").strip()

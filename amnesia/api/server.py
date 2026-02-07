@@ -64,6 +64,18 @@ app.add_middleware(
 )
 
 
+def main() -> None:
+    try:
+        import uvicorn
+    except ImportError as exc:  # pragma: no cover
+        raise SystemExit("uvicorn is required to run the API server") from exc
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+if __name__ == "__main__":
+    main()
+
+
 # ── Stats ────────────────────────────────────────────────────────────────────
 
 
