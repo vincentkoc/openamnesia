@@ -6,6 +6,25 @@ if [[ -z "${RENDER_API_KEY:-}" ]]; then
   exit 1
 fi
 
-echo "Render deploy script."
-echo "Expected: create a Render service tied to this repo, then trigger deploy."
-echo "Replace this script with `render deploy` or API calls when ready."
+if ! command -v render >/dev/null 2>&1; then
+  curl -fsSL https://raw.githubusercontent.com/render-oss/cli/refs/heads/main/bin/install.sh | sh
+  export PATH="$HOME/bin:$PATH"
+fi
+
+if [[ -z "${RENDER_SERVICE_ID:-}" ]]; then
+  echo "RENDER_SERVICE_ID is not set. Aborting."
+  exit 1
+fi
+
+cmd=(render deploys create "$RENDER_SERVICE_ID" --confirm --output json --wait)
+
+if [[ -n "${RENDER_COMMIT:-}" ]]; then
+  cmd+=(--commit "$RENDER_COMMIT")
+fi
+
+if [[ -n "${RENDER_IMAGE_URL:-}" ]]; then
+  cmd+=(--image "$RENDER_IMAGE_URL")
+fi
+
+echo "Triggering Render deploy for service: $RENDER_SERVICE_ID"
+"${cmd[@]}"
