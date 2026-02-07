@@ -12,6 +12,9 @@ dependencies = [
   "PyYAML>=6.0",
   "rich>=13.0.0",
   "tqdm>=4.66.0",
+  "fastapi>=0.110.0",
+  "uvicorn>=0.29.0",
+  "python-dotenv>=1.0.1",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +31,7 @@ llm = [
 
 [project.scripts]
 amnesia-daemon = "amnesia.daemon:main"
+amnesia = "amnesia.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
