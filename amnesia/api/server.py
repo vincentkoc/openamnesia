@@ -323,20 +323,41 @@ def list_sources():
 # ── Timeline ─────────────────────────────────────────────────────────────────
 
 
+_TIMELINE_GRANULARITIES = {
+    "5min": 5,
+    "10min": 10,
+    "15min": 15,
+    "30min": 30,
+    "hour": 60,
+    "6hour": 360,
+    "day": 1440,
+}
+
+
 @app.get("/api/timeline")
 def get_timeline(
-    granularity: str = Query(default="hour", pattern="^(hour|day|week)$"),
+    granularity: str = Query(default="hour", pattern="^(5min|10min|15min|30min|hour|6hour|day)$"),
     since: str | None = None,
     until: str | None = None,
 ):
     conn = _get_conn()
 
-    if granularity == "hour":
+    mins = _TIMELINE_GRANULARITIES[granularity]
+    if granularity == "day":
+        bucket_expr = "strftime('%Y-%m-%dT00:00:00', ts)"
+    elif granularity == "hour":
         bucket_expr = "strftime('%Y-%m-%dT%H:00:00', ts)"
-    elif granularity == "day":
-        bucket_expr = "strftime('%Y-%m-%d', ts)"
+    elif granularity == "6hour":
+        bucket_expr = (
+            "strftime('%Y-%m-%dT', ts) || "
+            "printf('%02d', (CAST(strftime('%H', ts) AS INT) / 6) * 6) || ':00:00'"
+        )
     else:
-        bucket_expr = "strftime('%Y-%W', ts)"
+        # Sub-hourly: 5min, 10min, 15min, 30min
+        bucket_expr = (
+            "strftime('%Y-%m-%dT%H:', ts) || "
+            f"printf('%02d', (CAST(strftime('%M', ts) AS INT) / {mins}) * {mins}) || ':00'"
+        )
 
     clauses: list[str] = []
     params: list[Any] = []
