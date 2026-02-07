@@ -1,70 +1,98 @@
 import type { Skill } from "../../lib/api";
-import { Badge } from "../common/Badge";
-import { timeAgo, truncate } from "../../lib/utils";
+import { cn, timeAgo, truncate } from "../../lib/utils";
+import { IconZap, IconPlay, IconX } from "../common/Icons";
 
 interface Props {
   skill: Skill;
+  onSelect?: (id: string) => void;
 }
 
-export function SkillCard({ skill }: Props) {
+const STATUS_COLOR: Record<string, string> = {
+  built: "text-ok",
+  validated: "text-accent",
+  candidate: "text-text-2",
+};
+
+function statusLabel(status: string): string {
+  if (status === "promoted") return "built";
+  return status;
+}
+
+export function SkillCard({ skill, onSelect }: Props) {
   const m = skill.metrics_json ?? {};
   const rate = m.success_rate as number | undefined;
   const turns = m.avg_turns as number | undefined;
   const count = m.occurrences as number | undefined;
+  const triggers = skill.trigger_json as { keywords?: string[] } | null;
+  const displayStatus = statusLabel(skill.status);
 
   return (
-    <div className="card group rounded-lg border border-line/40 bg-void-1/60 p-4 transition-colors hover:border-line-bright hover:bg-void-2">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h3 className="text-[13px] font-semibold text-text-0 group-hover:text-accent transition-colors">
-            {truncate(skill.name, 35)}
-          </h3>
-          <div className="mt-0.5 text-[10px] text-text-3">
-            {skill.version} &middot; {timeAgo(skill.updated_ts)}
-          </div>
-        </div>
-        <Badge variant={skill.status === "promoted" ? "ok" : skill.status === "validated" ? "accent" : "default"}>
-          {skill.status}
-        </Badge>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect?.(skill.skill_id)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect?.(skill.skill_id); } }}
+      className="card cursor-pointer rounded-lg border border-line/40 bg-void-1/60 p-3"
+    >
+      <div className="mb-2 flex items-center justify-between">
+        <span className="font-mono text-[12px] font-medium text-text-0">{truncate(skill.name, 30)}</span>
+        <span className={cn("text-[9px] font-semibold uppercase", STATUS_COLOR[displayStatus] ?? "text-text-3")}>
+          {displayStatus}
+        </span>
       </div>
 
-      {/* Metrics — big numbers */}
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {rate !== undefined && (
-          <div className="rounded-md bg-void-2 px-2 py-1.5 text-center">
-            <div className="text-[14px] font-bold tabular-nums text-ok">
-              {(rate * 100).toFixed(0)}%
-            </div>
-            <div className="text-[9px] uppercase tracking-wider text-text-3">success</div>
-          </div>
-        )}
-        {turns !== undefined && (
-          <div className="rounded-md bg-void-2 px-2 py-1.5 text-center">
-            <div className="text-[14px] font-bold tabular-nums text-text-0">
-              {turns.toFixed(1)}
-            </div>
-            <div className="text-[9px] uppercase tracking-wider text-text-3">avg turns</div>
-          </div>
-        )}
-        {count !== undefined && (
-          <div className="rounded-md bg-void-2 px-2 py-1.5 text-center">
-            <div className="text-[14px] font-bold tabular-nums text-text-0">
-              {count}
-            </div>
-            <div className="text-[9px] uppercase tracking-wider text-text-3">seen</div>
-          </div>
-        )}
+      <div className="flex items-center gap-3 text-[10px]">
+        <span className="font-mono text-text-3">{skill.version}</span>
+        {rate !== undefined && <span className="font-mono tabular-nums text-ok">{(rate * 100).toFixed(0)}%</span>}
+        {turns !== undefined && <span className="font-mono tabular-nums text-text-1">{turns.toFixed(1)} turns</span>}
+        {count !== undefined && <span className="font-mono tabular-nums text-text-2">{count}x</span>}
       </div>
 
-      {/* Triggers */}
-      {skill.trigger_json && (
-        <div className="mt-3 overflow-hidden rounded-md bg-void-0 px-2.5 py-2">
-          <pre className="text-[10px] text-text-2 leading-relaxed">
-            {truncate(JSON.stringify(skill.trigger_json, null, 1), 140)}
-          </pre>
+      {triggers?.keywords && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {triggers.keywords.slice(0, 4).map((kw, i) => (
+            <span key={i} className="rounded bg-void-2 px-1.5 py-0.5 font-mono text-[9px] text-text-3">{kw}</span>
+          ))}
         </div>
       )}
+
+      <div className="mt-2 flex items-center justify-between border-t border-line/20 pt-2">
+        <span className="font-mono text-[9px] tabular-nums text-text-3">{timeAgo(skill.updated_ts)}</span>
+        <div className="flex gap-1">
+          {skill.status === "candidate" && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); }}
+                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-accent bg-accent-dim hover:bg-accent hover:text-void-0 transition-colors"
+              >
+                <IconZap size={10} /> promote
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); }}
+                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-err bg-err-dim hover:bg-err hover:text-void-0 transition-colors"
+              >
+                <IconX size={10} /> reject
+              </button>
+            </>
+          )}
+          {skill.status === "validated" && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); }}
+                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-ok bg-ok-dim hover:bg-ok hover:text-void-0 transition-colors"
+              >
+                <IconPlay size={10} /> build
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); }}
+                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-err bg-err-dim hover:bg-err hover:text-void-0 transition-colors"
+              >
+                <IconX size={10} /> reject
+              </button>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

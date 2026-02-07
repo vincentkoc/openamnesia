@@ -4,6 +4,7 @@ import { StreamPage } from "./pages/StreamPage";
 import { MomentDetailPage } from "./pages/MomentDetailPage";
 import { SkillsPage } from "./pages/SkillsPage";
 import { SourcesPage } from "./pages/SourcesPage";
+import { ExportsPage } from "./pages/ExportsPage";
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
         <Route path="/moments/:momentId" element={<MomentDetailPage />} />
         <Route path="/skills" element={<SkillsPage />} />
         <Route path="/sources" element={<SourcesPage />} />
+        <Route path="/exports" element={<ExportsPage />} />
       </Route>
     </Routes>
   );
