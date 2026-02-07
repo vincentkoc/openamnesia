@@ -5,6 +5,7 @@ import { IconZap, IconPlay, IconX } from "../common/Icons";
 interface Props {
   skill: Skill;
   onSelect?: (id: string) => void;
+  onStatusChange?: (skillId: string, status: string) => void;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -18,7 +19,7 @@ function statusLabel(status: string): string {
   return status;
 }
 
-export function SkillCard({ skill, onSelect }: Props) {
+export function SkillCard({ skill, onSelect, onStatusChange }: Props) {
   const m = skill.metrics_json ?? {};
   const rate = m.success_rate as number | undefined;
   const turns = m.avg_turns as number | undefined;
@@ -62,13 +63,13 @@ export function SkillCard({ skill, onSelect }: Props) {
           {skill.status === "candidate" && (
             <>
               <button
-                onClick={(e) => { e.stopPropagation(); }}
+                onClick={(e) => { e.stopPropagation(); onStatusChange?.(skill.skill_id, "validated"); }}
                 className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-accent bg-accent-dim hover:bg-accent hover:text-void-0 transition-colors"
               >
                 <IconZap size={10} /> promote
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); }}
+                onClick={(e) => { e.stopPropagation(); onStatusChange?.(skill.skill_id, "rejected"); }}
                 className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-err bg-err-dim hover:bg-err hover:text-void-0 transition-colors"
               >
                 <IconX size={10} /> reject
@@ -78,13 +79,13 @@ export function SkillCard({ skill, onSelect }: Props) {
           {skill.status === "validated" && (
             <>
               <button
-                onClick={(e) => { e.stopPropagation(); }}
+                onClick={(e) => { e.stopPropagation(); onStatusChange?.(skill.skill_id, "promoted"); }}
                 className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-ok bg-ok-dim hover:bg-ok hover:text-void-0 transition-colors"
               >
                 <IconPlay size={10} /> build
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); }}
+                onClick={(e) => { e.stopPropagation(); onStatusChange?.(skill.skill_id, "rejected"); }}
                 className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-err bg-err-dim hover:bg-err hover:text-void-0 transition-colors"
               >
                 <IconX size={10} /> reject

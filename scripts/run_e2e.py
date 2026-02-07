@@ -14,7 +14,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 from amnesia.config import load_config
-from amnesia.exports.memory import MemoryExportConfig, export_memory
+from amnesia.exports.memory import MemoryExportConfig, export_memory_range
 from amnesia.exports.skills_md import export_skills_md
 from amnesia.sdk.imessage import IMessageIngestConfig, run_imessage_ingest
 from amnesia.store.factory import build_store
@@ -117,8 +117,13 @@ def _reset_db(config_path: Path) -> None:
     if not dsn.startswith("sqlite:///"):
         return
     db_path = Path(dsn.removeprefix("sqlite:///"))
-    if db_path.exists():
-        db_path.unlink()
+    for suffix in ("", "-shm", "-wal"):
+        target = Path(f"{db_path}{suffix}")
+        if target.exists():
+            try:
+                target.unlink()
+            except OSError:
+                pass
 
 
 def _since_arg(mode: str, since_days: int) -> list[str]:
@@ -133,18 +138,40 @@ def _run(cmd: list[str], env: dict[str, str]) -> int:
     return result.returncode
 
 
-def _export_outputs(config_path: Path) -> None:
+def _export_outputs(
+    config_path: Path, *, since_days: int, mode: str
+) -> tuple[list[Path], list[Path]]:
     cfg = load_config(config_path)
     if not cfg.exports.enabled:
-        return
+        return [], []
+    mem_paths: list[Path] = []
     if cfg.exports.memory.get("enabled", False):
         mem_cfg = MemoryExportConfig(**cfg.exports.memory)
-        export_memory(dsn=cfg.store.dsn, cfg=mem_cfg)
+        if mode == "recent" and since_days > 0:
+            end_date = datetime.now(UTC).date()
+            start_date = end_date - timedelta(days=max(0, since_days - 1))
+            mem_paths = export_memory_range(
+                dsn=cfg.store.dsn,
+                cfg=mem_cfg,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        else:
+            end_date = datetime.now(UTC).date()
+            start_date = end_date
+            mem_paths = export_memory_range(
+                dsn=cfg.store.dsn,
+                cfg=mem_cfg,
+                start_date=start_date,
+                end_date=end_date,
+            )
     store = build_store(cfg.store)
     skills = store.list_skills(limit=200)
     store.close()
+    skill_paths: list[Path] = []
     if skills:
-        export_skills_md(skills, out_dir=cfg.exports.skills_dir)
+        skill_paths = export_skills_md(skills, out_dir=cfg.exports.skills_dir)
+    return mem_paths, skill_paths
 
 
 def main() -> int:
@@ -224,7 +251,19 @@ def main() -> int:
                 return 1
             progress.advance(task, 1)
 
-    _export_outputs(config_path)
+    mem_paths, skill_paths = _export_outputs(
+        config_path,
+        since_days=cfg.since_days,
+        mode=cfg.mode,
+    )
+    if mem_paths:
+        console.print("[bold cyan]Memory exports:[/bold cyan]")
+        for path in mem_paths:
+            console.print(f"- {path}")
+    if skill_paths:
+        console.print("[bold cyan]Skill exports:[/bold cyan]")
+        for path in skill_paths:
+            console.print(f"- {path}")
     console.print("[bold green]E2E complete.[/bold green]")
     return 0
 

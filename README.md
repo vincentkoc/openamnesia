@@ -125,6 +125,21 @@ Read-only memory endpoints:
 - `/api/memory/daily/latest`
 - `/api/memory/daily/range?start=YYYY-MM-DD&end=YYYY-MM-DD`
 
+## Deployment
+Render:
+- Set `RENDER_API_KEY` and `RENDER_SERVICE_ID`
+- Run: `make deploy-render`
+
+Akash:
+- Build/push image to GHCR (CI does this automatically for Akash deploys)
+- Set `AKASH_WALLET`, `AKASH_KEY_NAME`, `AKASH_KEYRING_BACKEND`, `AKASH_NET`
+- Optional: `AKASH_IMAGE` (defaults to GHCR)
+- Run: `make deploy-akash`
+
+CI/CD:
+- Manual deploy workflow: `.github/workflows/deploy.yml`
+- Choose target `render` or `akash`
+
 ## Config
 ```yaml
 store:

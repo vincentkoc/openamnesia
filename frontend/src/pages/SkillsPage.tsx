@@ -1,11 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { cn, timeAgo } from "../lib/utils";
 import { EmptyState } from "../components/common/EmptyState";
 import { SkillCard } from "../components/skills/SkillCard";
 import { IconGrid, IconList, IconZap, IconPlay, IconX } from "../components/common/Icons";
 import { useTableFilter, FilterInput, useResizableColumns } from "../lib/hooks";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 
 const FILTERS = ["all", "candidate", "validated", "built"] as const;
 type LayoutMode = "compact" | "cards";
@@ -38,6 +38,7 @@ export function SkillsPage() {
   const [status, setStatus] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [layout, setLayout] = useState<LayoutMode>("compact");
+  const queryClient = useQueryClient();
 
   const { data } = useQuery({
     queryKey: ["skills", status],
@@ -47,6 +48,18 @@ export function SkillsPage() {
       return api.skills({ status: apiStatus, limit: 50 });
     },
   });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ skillId, newStatus }: { skillId: string; newStatus: string }) =>
+      api.updateSkillStatus(skillId, newStatus),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+    },
+  });
+
+  const handleStatusChange = useCallback((skillId: string, newStatus: string) => {
+    statusMutation.mutate({ skillId, newStatus });
+  }, [statusMutation]);
 
   const { filteredItems, query, setQuery } = useTableFilter({
     items: data?.items ?? [],
@@ -114,7 +127,7 @@ export function SkillsPage() {
             layout === "cards" ? (
               <div className="grid grid-cols-2 gap-3 p-4 xl:grid-cols-3">
                 {filteredItems.map((skill) => (
-                  <SkillCard key={skill.skill_id} skill={skill} onSelect={setSelectedId} />
+                  <SkillCard key={skill.skill_id} skill={skill} onSelect={setSelectedId} onStatusChange={handleStatusChange} />
                 ))}
               </div>
             ) : (
@@ -168,11 +181,11 @@ export function SkillsPage() {
                         style={cols.widths.actions ? { width: cols.widths.actions, flexShrink: 0 } : { width: 120, flexShrink: 0 }}>
                         {skill.status === "candidate" && (
                           <>
-                            <button onClick={(e) => { e.stopPropagation(); }}
+                            <button onClick={(e) => { e.stopPropagation(); handleStatusChange(skill.skill_id, "validated"); }}
                               className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-accent bg-accent-dim hover:bg-accent hover:text-void-0 transition-colors">
                               <IconZap size={9} /> promote
                             </button>
-                            <button onClick={(e) => { e.stopPropagation(); }}
+                            <button onClick={(e) => { e.stopPropagation(); handleStatusChange(skill.skill_id, "rejected"); }}
                               className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-err bg-err-dim hover:bg-err hover:text-void-0 transition-colors">
                               <IconX size={9} /> reject
                             </button>
@@ -180,11 +193,11 @@ export function SkillsPage() {
                         )}
                         {skill.status === "validated" && (
                           <>
-                            <button onClick={(e) => { e.stopPropagation(); }}
+                            <button onClick={(e) => { e.stopPropagation(); handleStatusChange(skill.skill_id, "promoted"); }}
                               className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-ok bg-ok-dim hover:bg-ok hover:text-void-0 transition-colors">
                               <IconPlay size={9} /> build
                             </button>
-                            <button onClick={(e) => { e.stopPropagation(); }}
+                            <button onClick={(e) => { e.stopPropagation(); handleStatusChange(skill.skill_id, "rejected"); }}
                               className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-err bg-err-dim hover:bg-err hover:text-void-0 transition-colors">
                               <IconX size={9} /> reject
                             </button>
@@ -233,16 +246,16 @@ export function SkillsPage() {
                 {(selected.status === "candidate" || selected.status === "validated") && (
                   <div className="flex items-center gap-2 border-b border-line/20 px-4 py-2.5">
                     {selected.status === "candidate" && (
-                      <button className="flex items-center gap-1 rounded px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-accent bg-accent-dim hover:bg-accent hover:text-void-0 transition-colors">
+                      <button onClick={() => handleStatusChange(selected.skill_id, "validated")} className="flex items-center gap-1 rounded px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-accent bg-accent-dim hover:bg-accent hover:text-void-0 transition-colors">
                         <IconZap size={10} /> promote to validated
                       </button>
                     )}
                     {selected.status === "validated" && (
-                      <button className="flex items-center gap-1 rounded px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-ok bg-ok-dim hover:bg-ok hover:text-void-0 transition-colors">
+                      <button onClick={() => handleStatusChange(selected.skill_id, "promoted")} className="flex items-center gap-1 rounded px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-ok bg-ok-dim hover:bg-ok hover:text-void-0 transition-colors">
                         <IconPlay size={10} /> build skill
                       </button>
                     )}
-                    <button className="flex items-center gap-1 rounded px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-err bg-err-dim hover:bg-err hover:text-void-0 transition-colors">
+                    <button onClick={() => handleStatusChange(selected.skill_id, "rejected")} className="flex items-center gap-1 rounded px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-err bg-err-dim hover:bg-err hover:text-void-0 transition-colors">
                       <IconX size={10} /> reject
                     </button>
                   </div>

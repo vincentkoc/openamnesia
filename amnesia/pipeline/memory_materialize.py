@@ -360,6 +360,8 @@ def _extract_topics(intent: str, summary: str, action: str) -> list[str]:
             continue
         if token.isdigit():
             continue
+        if _looks_like_id(token):
+            continue
         topics.append(token)
     return topics[:12]
 
@@ -400,6 +402,14 @@ def _build_checks(action: str, topics: list[str]) -> list[str]:
     if action in {"connect", "introduce", "follow up"}:
         checks.append("contacts_present")
     return list(dict.fromkeys(checks))
+
+
+def _looks_like_id(token: str) -> bool:
+    if len(token) >= 16 and re.fullmatch(r"[a-f0-9]+", token):
+        return True
+    if len(token) >= 20 and re.fullmatch(r"[a-z0-9]+", token):
+        return True
+    return False
 
 
 def _clip_summary(summary: str, limit: int = 96) -> str:

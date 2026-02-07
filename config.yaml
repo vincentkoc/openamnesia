@@ -69,12 +69,28 @@ exports:
     weekly: true
     monthly: true
     per_project: true
+    llm_enabled: true
+    llm_model: gpt-5-nano
+    llm_max_tokens: 10000
+    prompts:
+      system_daily: |
+        You are Open Amnesia. Write a concise daily memory. Focus on high-signal work,
+        decisions, and next actions. Use short paragraphs and bullets where useful.
+      system_weekly: |
+        You are Open Amnesia. Write a concise weekly memory. Emphasize themes, wins,
+        blockers, and upcoming priorities. Use short paragraphs and bullets.
+      system_monthly: |
+        You are Open Amnesia. Write a concise monthly memory. Emphasize major milestones,
+        enduring decisions, and shifts in focus. Use short paragraphs and bullets.
+      user: |
+        Summarize the period using this payload (JSON):
+        {payload}
 
 hooks:
   plugins: []
 
 e2e:
   mode: recent
-  since_days: 30
+  since_days: 60
   discovery_limit: 500
   log_level: INFO
