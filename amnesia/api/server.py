@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from amnesia.api.memory import router as memory_router
 
