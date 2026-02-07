@@ -14,7 +14,15 @@ import { useState, useCallback, useMemo } from "react";
 type ViewMode = "refined" | "raw";
 type LayoutMode = "compact" | "cards";
 
-const GRANULARITIES: Granularity[] = ["5min", "10min", "15min", "30min", "hour", "6hour", "day"];
+const GRANULARITIES: { value: Granularity; label: string }[] = [
+  { value: "5min", label: "5m" },
+  { value: "10min", label: "10m" },
+  { value: "15min", label: "15m" },
+  { value: "30min", label: "30m" },
+  { value: "hour", label: "1h" },
+  { value: "6hour", label: "6h" },
+  { value: "day", label: "1d" },
+];
 
 const MOMENT_COLS = [
   { key: "time", initialWidth: 80, minWidth: 50 },
@@ -39,7 +47,7 @@ export function StreamPage() {
   const [src, setSrc] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("refined");
-  const [granularity, setGranularity] = useState<Granularity>("hour");
+  const [granularity, setGranularity] = useState<Granularity>("10min");
   const [layout, setLayout] = useState<LayoutMode>("compact");
 
   const { data: stats } = useQuery({ queryKey: ["stats"], queryFn: api.stats });
@@ -99,7 +107,7 @@ export function StreamPage() {
 
           <div className="toggle-group">
             {GRANULARITIES.map((g) => (
-              <button key={g} className={granularity === g ? "active" : ""} onClick={() => setGranularity(g)}>{g}</button>
+              <button key={g.value} className={granularity === g.value ? "active" : ""} onClick={() => setGranularity(g.value)}>{g.label}</button>
             ))}
           </div>
 

@@ -34,7 +34,7 @@ function barsPerDay(g: Granularity): number {
 }
 
 export function TimelineChart({ data, granularity = "hour" }: Props) {
-  const [dayOffset, setDayOffset] = useState(0);
+  const [dayOffset, setDayOffset] = useState(1);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerW, setContainerW] = useState(800);
@@ -54,10 +54,6 @@ export function TimelineChart({ data, granularity = "hour" }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // Reset day offset when granularity changes
-  useEffect(() => {
-    setDayOffset(0);
-  }, [granularity]);
 
   const { days, bars, sessionBars, maxTotal, maxSession, sources, nowIdx, windowStart } = useMemo(() => {
     const dayMap = new Map<string, Map<number, { events: Record<string, number>; sessions: number }>>();
