@@ -6,6 +6,7 @@ import json
 import uuid
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
+from datetime import UTC, timedelta
 from pathlib import Path
 
 import yaml
@@ -22,6 +23,7 @@ from amnesia.pipeline.sessionize import sessionize_events
 from amnesia.store.factory import build_store
 from amnesia.connectors.registry import build_connectors
 from amnesia.utils.logging import get_logger, setup_logging
+from amnesia.exports.memory import MemoryExportConfig, export_memory
 from amnesia.filters import (
     SourceFilterPipeline,
     make_exclude_actors_filter,
@@ -71,7 +73,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--include-actors", action="append", default=[])
     parser.add_argument("--exclude-actors", action="append", default=[])
     parser.add_argument("--since")
+    parser.add_argument("--since-days", type=int, default=None)
     parser.add_argument("--until")
+    parser.add_argument("--reset-state", action="store_true")
     parser.add_argument("--keep-spool", action="store_true")
     parser.add_argument("--json", action="store_true")
     return parser.parse_args()
@@ -147,6 +151,8 @@ def _build_filter_pipeline(source_cfg: SourceConfig, args: argparse.Namespace) -
         pipeline.add(make_exclude_actors_filter(exclude_actors))
 
     since_raw = args.since if args.since is not None else source_cfg.since_ts
+    if args.since_days is not None and args.since_days > 0:
+        since_raw = (utc_now() - timedelta(days=args.since_days)).astimezone(UTC).isoformat()
     until_raw = args.until if args.until is not None else source_cfg.until_ts
     since_ts = parse_iso_ts(since_raw)
     until_ts = parse_iso_ts(until_raw)
@@ -169,6 +175,8 @@ def main() -> int:
     spool = JsonlSpool(Path(args.spool_dir))
     full_state = _load_state(state_path)
     per_source_state = full_state.get("per_source", {})
+    if args.reset_state:
+        per_source_state = {}
 
     results: list[SourceRunResult] = []
     top_entities: dict[str, dict[str, int]] = {
@@ -235,7 +243,18 @@ def main() -> int:
             per_source_state[source_name] = source_state_after.to_dict()
 
             records = list(spool.iter_records(segments))
+        if records and args.include_groups:
+            pre_group_counts = {}
+            for record in records:
+                key = record.group_hint or record.session_hint or "-"
+                pre_group_counts[key] = pre_group_counts.get(key, 0) + 1
+        else:
+            pre_group_counts = {}
+
         records, _dropped = pipeline.apply(records)
+        if args.include_groups and not records and pre_group_counts:
+            top_groups = sorted(pre_group_counts.items(), key=lambda item: item[1], reverse=True)[:5]
+            logger.info("No records after include-groups filter for %s. Top groups: %s", source_name, top_groups)
         if args.max_records_per_source is not None:
             records = records[: args.max_records_per_source]
         events = normalize_records(records)
@@ -307,6 +326,10 @@ def main() -> int:
                 project_mentions=project_mentions,
             )
         )
+
+    if config.exports.enabled and config.exports.memory.get("enabled", False):
+        mem_cfg = MemoryExportConfig(**config.exports.memory)
+        export_memory(dsn=config.store.dsn, cfg=mem_cfg)
 
         if not args.keep_spool:
             spool.cleanup(segments)

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 os.environ.setdefault("XDG_CACHE_HOME", str(Path(".cache").resolve()))
@@ -22,6 +23,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--source", required=True)
     parser.add_argument("--store-dsn", default="sqlite:///./data/amnesia.db")
     parser.add_argument("--since")
+    parser.add_argument("--since-days", type=int, default=30)
     parser.add_argument("--limit", type=int, default=5000)
     parser.add_argument("--dims", type=int, default=128)
     parser.add_argument("--use-llm", action="store_true")
@@ -38,7 +40,10 @@ def main() -> int:
     store = build_store(StoreConfig(backend="sqlite", dsn=args.store_dsn))
     store.init_schema()
 
-    events = store.list_events_for_source(source=args.source, since_ts=args.since, limit=args.limit)
+    since_ts = args.since
+    if since_ts is None and args.since_days is not None and args.since_days > 0:
+        since_ts = (datetime.now(UTC) - timedelta(days=args.since_days)).isoformat(timespec="seconds")
+    events = store.list_events_for_source(source=args.source, since_ts=since_ts, limit=args.limit)
     events_by_id = {event.event_id: event for event in events}
     embedding_result = embed_events(
         events,
