@@ -15,7 +15,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup-venv install install-dev test typecheck lint format precommit run-once run source-test clean
+.PHONY: help setup-venv install install-dev test typecheck lint format precommit run-once run source-test e2e-all api ui sdk clean
 
 help:
 	@echo "Available targets:"
@@ -30,6 +30,10 @@ help:
 	@echo "  run-once     Run one ingestion pass"
 	@echo "  run          Run daemon in watch mode"
 	@echo "  source-test  Test one source (set SOURCE=imessage)"
+	@echo "  e2e-all     Ingest + discovery for all sources (MODE=recent|all)"
+	@echo "  api         Run API server"
+	@echo "  ui          Run frontend dev server"
+	@echo "  sdk         Run interactive SDK menu"
 	@echo "  clean        Remove local build/cache artifacts"
 
 setup-venv:
@@ -65,6 +69,22 @@ run:
 source-test:
 	@if [ -z "$(SOURCE)" ]; then echo "Set SOURCE=<name>, e.g. SOURCE=imessage"; exit 1; fi
 	$(PYTHON) scripts/test_source.py --config config.yaml --source $(SOURCE)
+
+e2e-all:
+	@if [ "$(MODE)" = "all" ]; then \
+		$(PYTHON) scripts/run_e2e.py --mode all; \
+	else \
+		$(PYTHON) scripts/run_e2e.py --mode recent; \
+	fi
+
+api:
+	$(PYTHON) -m amnesia.api.server
+
+ui:
+	cd frontend && npm run dev
+
+sdk:
+	amnesia
 
 clean:
 	rm -rf build dist .pytest_cache .ruff_cache .mypy_cache __pycache__
