@@ -78,6 +78,7 @@ Data consistency beats prompt cleverness. The quality of agent memory depends on
 - Backend: FastAPI, SQLite
 - Frontend: React, Vite, Tailwind CSS, React Router, TanStack Query
 - LLM/Enrichment: LiteLLM (OpenAI models), You.com APIs, Composio
+- Deployment: Render, Akash
 - Tooling: ruff, mypy, pytest, pre-commit
 
 ## Quick start
@@ -101,6 +102,12 @@ Run API/UI:
 ```bash
 make api
 make ui
+```
+
+Deploy:
+```bash
+make deploy-render
+make deploy-akash
 ```
 
 ## Commands

@@ -15,7 +15,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup-venv install install-dev test typecheck lint format precommit run-once run source-test e2e-all api ui sdk clean
+.PHONY: help setup-venv install install-dev test typecheck lint format precommit run-once run source-test e2e-all api ui sdk deploy-render deploy-akash clean
 
 help:
 	@echo "Available targets:"
@@ -34,6 +34,8 @@ help:
 	@echo "  api         Run API server"
 	@echo "  ui          Run frontend dev server"
 	@echo "  sdk         Run interactive SDK menu"
+	@echo "  deploy-render  Deploy to Render (requires RENDER_API_KEY)"
+	@echo "  deploy-akash   Deploy to Akash (requires AKASH_WALLET)"
 	@echo "  clean        Remove local build/cache artifacts"
 
 setup-venv:
@@ -85,6 +87,12 @@ ui:
 
 sdk:
 	amnesia
+
+deploy-render:
+	bash scripts/deploy_render.sh
+
+deploy-akash:
+	bash scripts/deploy_akash.sh
 
 clean:
 	rm -rf build dist .pytest_cache .ruff_cache .mypy_cache __pycache__
