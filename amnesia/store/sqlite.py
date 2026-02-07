@@ -162,6 +162,35 @@ class SQLiteStore:
         self.conn.commit()
         return inserted
 
+    def list_skills(self, limit: int = 100) -> list[dict]:
+        rows = self.conn.execute(
+            """
+            SELECT skill_id, name, trigger_json, steps_json, checks_json,
+                   version, status, metrics_json, created_ts, updated_ts
+            FROM skills
+            ORDER BY updated_ts DESC
+            LIMIT ?
+            """,
+            (max(1, limit),),
+        ).fetchall()
+        skills: list[dict] = []
+        for row in rows:
+            skills.append(
+                {
+                    "skill_id": row["skill_id"],
+                    "name": row["name"],
+                    "trigger": from_json(row["trigger_json"]),
+                    "steps": from_json(row["steps_json"]),
+                    "checks": from_json(row["checks_json"]),
+                    "version": row["version"],
+                    "status": row["status"],
+                    "metrics": from_json(row["metrics_json"]),
+                    "created_ts": row["created_ts"],
+                    "updated_ts": row["updated_ts"],
+                }
+            )
+        return skills
+
     def save_source_status(self, status: SourceStatus) -> None:
         self.conn.execute(
             """

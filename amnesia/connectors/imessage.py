@@ -34,6 +34,8 @@ class IMessageConnector:
     def _poll_sqlite(self, state: dict[str, Any]) -> SourcePollResult:
         last_rowid = int(state.get("last_rowid", 0) or 0)
         db_path = str(self.settings.options.get("db_path", ""))
+        if db_path:
+            db_path = str(Path(db_path).expanduser())
         limit = int(self.settings.options.get("limit", 500) or 500)
 
         output = read_messages(

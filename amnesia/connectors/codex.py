@@ -247,6 +247,6 @@ def _normalize_group(value: Any) -> str | None:
     if raw.startswith("http"):
         tail = raw.rstrip("/").split("/")[-1]
         if tail.endswith(".git"):
-            tail = tail[: -4]
+            tail = tail[:-4]
         return tail or raw
     return raw.rstrip("/").split("/")[-1] or raw

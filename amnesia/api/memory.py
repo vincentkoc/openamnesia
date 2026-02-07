@@ -4,8 +4,8 @@ from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Query
 
-from amnesia.exports.memory import MemoryExportConfig, export_memory
 from amnesia.enrichment.vendors import vendor_status
+from amnesia.exports.memory import MemoryExportConfig, export_memory
 
 router = APIRouter()
 

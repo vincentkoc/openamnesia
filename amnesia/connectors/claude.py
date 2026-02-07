@@ -87,6 +87,7 @@ class ClaudeConnector(FileDropConnector):
             )
 
         return None
+
     def _build_record(
         self,
         *,

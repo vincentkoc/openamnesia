@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import json
-import fnmatch
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime

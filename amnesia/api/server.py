@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
 from amnesia.api.memory import router as memory_router
 
 # Resolve DB path relative to the project root (two levels up from this file)

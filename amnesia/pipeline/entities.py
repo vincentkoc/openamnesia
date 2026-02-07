@@ -124,10 +124,10 @@ def _extract_from_event(event: Event) -> list[EntityMention]:
         project = next((group for group in match.groups() if group), None)
         if project is None:
             continue
-        normalized = _normalize_project(project)
-        if not normalized:
+        project_name: str | None = _normalize_project(project)
+        if not project_name:
             continue
-        mentions.append(_make_mention(event, "project", normalized, confidence=0.75))
+        mentions.append(_make_mention(event, "project", project_name, confidence=0.75))
 
     cwd = event.meta_json.get("cwd")
     if isinstance(cwd, str) and cwd.strip():

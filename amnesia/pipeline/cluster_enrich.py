@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC
 from typing import Any
 
+from amnesia.enrichment.youcom import youcom_search
 from amnesia.inference.litellm_provider import LiteLLMProvider
 from amnesia.models import ClusterEnrichment, ClusterMembership, Event, EventCluster, utc_now
 
@@ -100,6 +102,12 @@ def enrich_clusters(
                     f"{cluster.cluster_id}: {llm_error or 'unknown_error'}"
                 )
 
+        grounded_context: list[dict[str, object]] = []
+        if os.environ.get("AMNESIA_YOUCOM_ENRICH", "1") != "0":
+            query = str(payload.get("label", "")).strip()
+            if query:
+                grounded_context = youcom_search(query, count=3)
+
         enrichment_id = hashlib.sha256(
             f"{cluster.cluster_id}|{provider_name}|{summary}".encode()
         ).hexdigest()
@@ -122,6 +130,7 @@ def enrich_clusters(
                     "outcome": extracted.get("outcome"),
                     "friction": extracted.get("friction"),
                     "confidence": extracted.get("confidence"),
+                    "grounded_context": grounded_context,
                 },
             )
         )

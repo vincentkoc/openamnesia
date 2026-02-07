@@ -69,6 +69,10 @@ class InMemoryStore:
             self.skills[key] = skill
         return inserted
 
+    def list_skills(self, limit: int = 100) -> list[dict]:
+        items = list(self.skills.values())
+        return items[: max(1, limit)]
+
     def save_source_status(self, status: SourceStatus) -> None:
         self.source_status[status.source] = status
 

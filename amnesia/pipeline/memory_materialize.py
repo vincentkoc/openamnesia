@@ -175,12 +175,16 @@ def _derive_skill_candidates(skill_seed: list[SkillSeed]) -> list[dict[str, Any]
         sample_summaries = [
             _clip_summary(summary) for summary in summary_samples.get(skill_key, [])[:2]
         ]
+        composio_toolkits = _suggest_composio_toolkits(
+            " ".join(sample_summaries + sample_intents + [profile["name"]])
+        )
         candidates.append(
             {
                 "name": profile["name"],
                 "trigger": {"skill_key": skill_key, "sample_intents": sample_intents},
                 "steps": profile["steps"],
                 "checks": profile["checks"],
+                "composio": {"toolkits": composio_toolkits},
                 "metrics": {
                     "cluster_frequency": freq,
                     "avg_confidence": round(avg_conf, 3),
@@ -243,3 +247,19 @@ def _clip_summary(summary: str, limit: int = 96) -> str:
     if len(clean) <= limit:
         return clean
     return clean[: limit - 3] + "..."
+
+
+def _suggest_composio_toolkits(text: str) -> list[str]:
+    low = text.lower()
+    toolkits: list[str] = []
+    if any(term in low for term in ("issue", "repo", "pull request", "merge", "github")):
+        toolkits.append("github")
+    if any(term in low for term in ("email", "inbox", "gmail", "send mail")):
+        toolkits.append("gmail")
+    if any(term in low for term in ("doc", "notion", "wiki", "spec")):
+        toolkits.append("notion")
+    if any(term in low for term in ("calendar", "meeting", "schedule", "invite")):
+        toolkits.append("google_calendar")
+    if any(term in low for term in ("slack", "channel", "message")):
+        toolkits.append("slack")
+    return list(dict.fromkeys(toolkits))[:5]
