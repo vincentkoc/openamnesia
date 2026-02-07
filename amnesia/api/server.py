@@ -15,6 +15,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from amnesia.api.memory import router as memory_router
+from amnesia.config import StoreConfig
+from amnesia.store.factory import build_store
 
 # Resolve DB path relative to the project root (two levels up from this file)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -321,19 +323,13 @@ def update_skill(skill_id: str, body: SkillStatusUpdate):
             status_code=400,
             detail=(f"Invalid status. Must be one of: {', '.join(sorted(allowed))}"),
         )
-    conn = _get_conn()
-    # Temporarily allow writes for this mutation
-    conn.execute("PRAGMA query_only=OFF")
+    store = build_store(StoreConfig(backend="sqlite", dsn=f"sqlite:///{DB_PATH}"))
     try:
-        cur = conn.execute(
-            "UPDATE skills SET status = ?, updated_ts = datetime('now') WHERE skill_id = ?",
-            (body.status, skill_id),
-        )
-        conn.commit()
-        if cur.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Skill not found")
+        updated = store.update_skill_status(skill_id, body.status)
     finally:
-        conn.execute("PRAGMA query_only=ON")
+        store.close()
+    if not updated:
+        raise HTTPException(status_code=404, detail="Skill not found")
     return {"ok": True, "skill_id": skill_id, "status": body.status}
 
 
