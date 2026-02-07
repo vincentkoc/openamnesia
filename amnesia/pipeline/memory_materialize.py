@@ -64,6 +64,20 @@ _STOPWORDS = {
     "with",
     "you",
     "your",
+    "cluster",
+    "clusters",
+    "event",
+    "events",
+    "appears",
+    "appeared",
+    "summary",
+    "workflow",
+    "workflows",
+    "task",
+    "tasks",
+    "tool_output",
+    "tool_result",
+    "exec_command",
 }
 
 _ACTION_PHRASES = [
@@ -227,12 +241,16 @@ def materialize_from_enrichments(
         confidence = float(payload.get("confidence", 0.5) or 0.5)
         cluster = cluster_by_id.get(enrichment.cluster_id)
         size = int(cluster.size) if cluster is not None else int(payload.get("size", 0) or 0)
+        summary = enrichment.summary or ""
+        low_signal = _is_low_signal_summary(summary)
+        if low_signal:
+            summary = ""
 
         fact_candidates.append(
             {
                 "kind": "cluster_summary",
                 "cluster_id": enrichment.cluster_id,
-                "summary": enrichment.summary,
+                "summary": summary or enrichment.summary,
                 "intent": intent,
                 "outcome": outcome,
                 "friction": friction,
@@ -243,12 +261,15 @@ def materialize_from_enrichments(
             }
         )
         if not intent or intent in {"cluster_summary_workflow"}:
-            intent = _infer_intent_from_summary(enrichment.summary)
-        if intent:
+            if not low_signal:
+                intent = _infer_intent_from_summary(summary or enrichment.summary)
+            else:
+                intent = ""
+        if intent and not low_signal:
             skill_seed.append(
                 SkillSeed(
                     intent=intent,
-                    summary=enrichment.summary or "",
+                    summary=summary or "",
                     confidence=confidence,
                     support=max(1, size),
                 )
@@ -369,6 +390,8 @@ def _extract_topics(intent: str, summary: str, action: str) -> list[str]:
 def _build_skill_key(action: str, topics: list[str]) -> str | None:
     if not action or not topics:
         return None
+    if len(topics) < 2:
+        return None
     key = f"{action}:{' '.join(topics[:3])}"
     return key[:120]
 
@@ -408,6 +431,17 @@ def _looks_like_id(token: str) -> bool:
     if len(token) >= 16 and re.fullmatch(r"[a-f0-9]+", token):
         return True
     if len(token) >= 20 and re.fullmatch(r"[a-z0-9]+", token):
+        return True
+    return False
+
+
+def _is_low_signal_summary(summary: str) -> bool:
+    if not summary:
+        return True
+    low = summary.lower().strip()
+    if low.startswith("cluster ") and "appears" in low:
+        return True
+    if any(term in low for term in ("tool_output", "tool_result", "exec_command")):
         return True
     return False
 

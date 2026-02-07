@@ -27,7 +27,7 @@ if [[ ! -f "$SDL_PATH" ]]; then
   exit 1
 fi
 
-IMAGE="${AKASH_IMAGE:-ghcr.io/${GITHUB_REPOSITORY:-openamnesia}/openamnesia:latest}"
+IMAGE="${AKASH_IMAGE:-ghcr.io/${GITHUB_REPOSITORY:-vincentkoc/openamnesia}:latest}"
 TMP_SDL="$(mktemp)"
 sed "s|__AKASH_IMAGE__|$IMAGE|g" "$SDL_PATH" > "$TMP_SDL"
 

@@ -5,10 +5,15 @@ from __future__ import annotations
 import shutil
 import sqlite3
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 from amnesia.models import utc_now
-from amnesia.sources.imessage.helpers import parse_apple_message_date, resolve_imessage_db_path
+from amnesia.sources.imessage.helpers import (
+    APPLE_EPOCH,
+    parse_apple_message_date,
+    resolve_imessage_db_path,
+)
 from amnesia.sources.imessage.types import IMessageMessage, IMessageReadInput, IMessageReadOutput
 
 
@@ -28,8 +33,43 @@ class ReadMessagesOp:
         conn, opened_path = self._open_readable_connection(db_path)
         conn.row_factory = sqlite3.Row
         try:
-            rows = conn.execute(
-                """
+            since_dt = _parse_iso_ts(input_data.options.get("since_ts"))
+            until_dt = _parse_iso_ts(input_data.options.get("until_ts"))
+            where = [
+                "m.rowid > ?",
+                "m.text IS NOT NULL",
+                "TRIM(m.text) != ''",
+            ]
+            params: list[object] = [input_data.min_rowid_exclusive]
+
+            if since_dt:
+                since_seconds = _apple_seconds(since_dt)
+                since_nanos = int(since_seconds * 1_000_000_000)
+                where.append(
+                    """
+                    (
+                      (m.date > 10000000000 AND m.date >= ?)
+                      OR (m.date <= 10000000000 AND m.date >= ?)
+                    )
+                    """
+                )
+                params.extend([since_nanos, since_seconds])
+
+            if until_dt:
+                until_seconds = _apple_seconds(until_dt)
+                until_nanos = int(until_seconds * 1_000_000_000)
+                where.append(
+                    """
+                    (
+                      (m.date > 10000000000 AND m.date <= ?)
+                      OR (m.date <= 10000000000 AND m.date <= ?)
+                    )
+                    """
+                )
+                params.extend([until_nanos, until_seconds])
+
+            params.append(input_data.limit)
+            sql = f"""
                 SELECT
                   m.rowid AS rowid,
                   m.text AS text,
@@ -48,14 +88,11 @@ class ReadMessagesOp:
                 LEFT JOIN handle h ON h.rowid = m.handle_id
                 LEFT JOIN chat_message_join cmj ON cmj.message_id = m.rowid
                 LEFT JOIN chat c ON c.rowid = cmj.chat_id
-                WHERE m.rowid > ?
-                  AND m.text IS NOT NULL
-                  AND TRIM(m.text) != ''
-                ORDER BY m.rowid ASC
+                WHERE {" AND ".join(where)}
+                ORDER BY m.date ASC
                 LIMIT ?
-                """,
-                (input_data.min_rowid_exclusive, input_data.limit),
-            ).fetchall()
+                """
+            rows = conn.execute(sql, params).fetchall()
         finally:
             conn.close()
 
@@ -112,3 +149,20 @@ class ReadMessagesOp:
                     "Grant Terminal/CLI Full Disk Access in macOS Privacy settings, "
                     "or use imessage options.mode=jsonl for exports."
                 ) from copy_exc
+
+
+def _parse_iso_ts(value: object | None) -> datetime | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    normalized = raw.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _apple_seconds(value: datetime) -> float:
+    return (value - APPLE_EPOCH).total_seconds()

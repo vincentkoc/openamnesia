@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
-from contextlib import asynccontextmanager
+import threading
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from typing import Any
 
+import yaml
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +26,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DB_PATH = os.environ.get("AMNESIA_DB", str(_PROJECT_ROOT / "data" / "amnesia.db"))
 
 _conn: sqlite3.Connection | None = None
+_db_lock = threading.Lock()
 
 
 def _get_conn() -> sqlite3.Connection:
@@ -32,7 +36,15 @@ def _get_conn() -> sqlite3.Connection:
         _conn.row_factory = sqlite3.Row
         _conn.execute("PRAGMA journal_mode=WAL")
         _conn.execute("PRAGMA query_only=ON")
+        _conn.execute("PRAGMA busy_timeout=3000")
     return _conn
+
+
+@contextmanager
+def _conn_ctx() -> sqlite3.Connection:
+    with _db_lock:
+        conn = _get_conn()
+        yield conn
 
 
 def _rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
@@ -68,49 +80,38 @@ app.add_middleware(
 )
 
 
-def main() -> None:
-    try:
-        import uvicorn
-    except ImportError as exc:  # pragma: no cover
-        raise SystemExit("uvicorn is required to run the API server") from exc
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-if __name__ == "__main__":
-    main()
-
 
 # ── Stats ────────────────────────────────────────────────────────────────────
 
 
 @app.get("/api/stats")
 def get_stats():
-    conn = _get_conn()
-    total_events = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
-    total_sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
-    total_moments = conn.execute("SELECT COUNT(*) FROM moments").fetchone()[0]
-    total_skills = conn.execute("SELECT COUNT(*) FROM skills").fetchone()[0]
-    total_entities = conn.execute("SELECT COUNT(*) FROM entity_mentions").fetchone()[0]
+    with _conn_ctx() as conn:
+        total_events = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        total_sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+        total_moments = conn.execute("SELECT COUNT(*) FROM moments").fetchone()[0]
+        total_skills = conn.execute("SELECT COUNT(*) FROM skills").fetchone()[0]
+        total_entities = conn.execute("SELECT COUNT(*) FROM entity_mentions").fetchone()[0]
 
-    sources = _rows_to_dicts(
-        conn.execute(
-            "SELECT source, COUNT(*) as event_count FROM events GROUP BY source"
-        ).fetchall()
-    )
+        sources = _rows_to_dicts(
+            conn.execute(
+                "SELECT source, COUNT(*) as event_count FROM events GROUP BY source"
+            ).fetchall()
+        )
 
-    recent_events = conn.execute(
-        "SELECT COUNT(*) FROM events WHERE ts >= datetime('now', '-24 hours')"
-    ).fetchone()[0]
+        recent_events = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE ts >= datetime('now', '-24 hours')"
+        ).fetchone()[0]
 
-    return {
-        "total_events": total_events,
-        "total_sessions": total_sessions,
-        "total_moments": total_moments,
-        "total_skills": total_skills,
-        "total_entities": total_entities,
-        "recent_events_24h": recent_events,
-        "sources": sources,
-    }
+        return {
+            "total_events": total_events,
+            "total_sessions": total_sessions,
+            "total_moments": total_moments,
+            "total_skills": total_skills,
+            "total_entities": total_entities,
+            "recent_events_24h": recent_events,
+            "sources": sources,
+        }
 
 
 # ── Events ───────────────────────────────────────────────────────────────────
@@ -126,33 +127,40 @@ def list_events(
     since: str | None = None,
     until: str | None = None,
 ):
-    conn = _get_conn()
-    clauses: list[str] = []
-    params: list[Any] = []
-    if source:
-        clauses.append("source = ?")
-        params.append(source)
-    if session_id:
-        clauses.append("session_id = ?")
-        params.append(session_id)
-    if actor:
-        clauses.append("actor = ?")
-        params.append(actor)
-    if since:
-        clauses.append("ts >= ?")
-        params.append(since)
-    if until:
-        clauses.append("ts <= ?")
-        params.append(until)
+    with _conn_ctx() as conn:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if source:
+            clauses.append("source = ?")
+            params.append(source)
+        if session_id:
+            clauses.append("session_id = ?")
+            params.append(session_id)
+        if actor:
+            clauses.append("actor = ?")
+            params.append(actor)
+        if since:
+            clauses.append("ts >= ?")
+            params.append(since)
+        if until:
+            clauses.append("ts <= ?")
+            params.append(until)
 
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    sql = f"SELECT * FROM events {where} ORDER BY ts DESC LIMIT ? OFFSET ?"
-    params.extend([limit, offset])
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        sql = f"SELECT * FROM events {where} ORDER BY ts DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
 
-    rows = conn.execute(sql, params).fetchall()
-    total = conn.execute(f"SELECT COUNT(*) FROM events {where}", params[:-2]).fetchone()[0]
+        rows = conn.execute(sql, params).fetchall()
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM events {where}", params[:-2]
+        ).fetchone()[0]
 
-    return {"items": _rows_to_dicts(rows), "total": total, "limit": limit, "offset": offset}
+        return {
+            "items": _rows_to_dicts(rows),
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
 
 
 # ── Sessions ─────────────────────────────────────────────────────────────────
@@ -195,30 +203,37 @@ def list_moments(
     limit: int = Query(default=50, le=200),
     offset: int = 0,
 ):
-    conn = _get_conn()
-    clauses: list[str] = []
-    params: list[Any] = []
-    if source:
-        clauses.append("s.source = ?")
-        params.append(source)
+    with _conn_ctx() as conn:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if source:
+            clauses.append("s.source = ?")
+            params.append(source)
 
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    sql = f"""
-        SELECT m.*, s.source, s.start_ts as session_start_ts, s.end_ts as session_end_ts
-        FROM moments m
-        JOIN sessions s ON m.session_key = s.session_key
-        {where}
-        ORDER BY s.start_ts DESC, m.start_turn ASC
-        LIMIT ? OFFSET ?
-    """
-    params.extend([limit, offset])
-    rows = conn.execute(sql, params).fetchall()
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        sql = f"""
+            SELECT m.*, s.source, s.start_ts as session_start_ts, s.end_ts as session_end_ts
+            FROM moments m
+            JOIN sessions s ON m.session_key = s.session_key
+            {where}
+            ORDER BY s.start_ts DESC, m.start_turn ASC
+            LIMIT ? OFFSET ?
+        """
+        params.extend([limit, offset])
+        rows = conn.execute(sql, params).fetchall()
 
-    total = conn.execute(
-        f"SELECT COUNT(*) FROM moments m JOIN sessions s ON m.session_key = s.session_key {where}",
-        params[:-2],
-    ).fetchone()[0]
-    return {"items": _rows_to_dicts(rows), "total": total, "limit": limit, "offset": offset}
+        total = conn.execute(
+            "SELECT COUNT(*) FROM moments m "
+            "JOIN sessions s ON m.session_key = s.session_key "
+            f"{where}",
+            params[:-2],
+        ).fetchone()[0]
+        return {
+            "items": _rows_to_dicts(rows),
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
 
 
 @app.get("/api/moments/{moment_id}")
@@ -321,7 +336,7 @@ def update_skill(skill_id: str, body: SkillStatusUpdate):
     if body.status not in allowed:
         raise HTTPException(
             status_code=400,
-            detail=(f"Invalid status. Must be one of: {', '.join(sorted(allowed))}"),
+            detail=f"Invalid status. Must be one of: {', '.join(sorted(allowed))}",
         )
     store = build_store(StoreConfig(backend="sqlite", dsn=f"sqlite:///{DB_PATH}"))
     try:
@@ -475,45 +490,44 @@ def get_timeline(
     since: str | None = None,
     until: str | None = None,
 ):
-    conn = _get_conn()
+    with _conn_ctx() as conn:
+        mins = _TIMELINE_GRANULARITIES[granularity]
+        if granularity == "day":
+            bucket_expr = "strftime('%Y-%m-%dT00:00:00', ts)"
+        elif granularity == "hour":
+            bucket_expr = "strftime('%Y-%m-%dT%H:00:00', ts)"
+        elif granularity == "6hour":
+            bucket_expr = (
+                "strftime('%Y-%m-%dT', ts) || "
+                "printf('%02d', (CAST(strftime('%H', ts) AS INT) / 6) * 6) || ':00:00'"
+            )
+        else:
+            # Sub-hourly: 5min, 10min, 15min, 30min
+            bucket_expr = (
+                "strftime('%Y-%m-%dT%H:', ts) || "
+                f"printf('%02d', (CAST(strftime('%M', ts) AS INT) / {mins}) * {mins}) || ':00'"
+            )
 
-    mins = _TIMELINE_GRANULARITIES[granularity]
-    if granularity == "day":
-        bucket_expr = "strftime('%Y-%m-%dT00:00:00', ts)"
-    elif granularity == "hour":
-        bucket_expr = "strftime('%Y-%m-%dT%H:00:00', ts)"
-    elif granularity == "6hour":
-        bucket_expr = (
-            "strftime('%Y-%m-%dT', ts) || "
-            "printf('%02d', (CAST(strftime('%H', ts) AS INT) / 6) * 6) || ':00:00'"
-        )
-    else:
-        # Sub-hourly: 5min, 10min, 15min, 30min
-        bucket_expr = (
-            "strftime('%Y-%m-%dT%H:', ts) || "
-            f"printf('%02d', (CAST(strftime('%M', ts) AS INT) / {mins}) * {mins}) || ':00'"
-        )
+        clauses: list[str] = []
+        params: list[Any] = []
+        if since:
+            clauses.append("ts >= ?")
+            params.append(since)
+        if until:
+            clauses.append("ts <= ?")
+            params.append(until)
 
-    clauses: list[str] = []
-    params: list[Any] = []
-    if since:
-        clauses.append("ts >= ?")
-        params.append(since)
-    if until:
-        clauses.append("ts <= ?")
-        params.append(until)
-
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    sql = f"""
-        SELECT {bucket_expr} as bucket, source, COUNT(*) as event_count,
-            SUM(CASE WHEN tool_status = 'error' THEN 1 ELSE 0 END) as error_count,
-            COUNT(DISTINCT session_id) as session_count
-        FROM events {where}
-        GROUP BY bucket, source
-        ORDER BY bucket ASC
-    """
-    rows = conn.execute(sql, params).fetchall()
-    return {"items": _rows_to_dicts(rows)}
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        sql = f"""
+            SELECT {bucket_expr} as bucket, source, COUNT(*) as event_count,
+                SUM(CASE WHEN tool_status = 'error' THEN 1 ELSE 0 END) as error_count,
+                COUNT(DISTINCT session_id) as session_count
+            FROM events {where}
+            GROUP BY bucket, source
+            ORDER BY bucket ASC
+        """
+        rows = conn.execute(sql, params).fetchall()
+        return {"items": _rows_to_dicts(rows)}
 
 
 # ── Entities ─────────────────────────────────────────────────────────────────
@@ -556,8 +570,129 @@ def list_audit(limit: int = Query(default=20, le=100)):
     return {"items": _rows_to_dicts(rows)}
 
 
+# ── Exports ─────────────────────────────────────────────────────────────────
+
+
+def _load_config() -> dict[str, Any]:
+    cfg_path = _PROJECT_ROOT / "config.yaml"
+    if cfg_path.is_file():
+        with open(cfg_path) as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+def _classify_memory_file(name: str) -> dict[str, str]:
+    """Classify a memory export filename into type and date key."""
+    stem = Path(name).stem
+    # Weekly: 2026-W06
+    if re.match(r"^\d{4}-W\d{2}$", stem):
+        return {"type": "weekly", "date": stem}
+    # Monthly: 2026-02
+    if re.match(r"^\d{4}-\d{2}$", stem):
+        return {"type": "monthly", "date": stem}
+    # Daily: 2026_02_06
+    if re.match(r"^\d{4}_\d{2}_\d{2}$", stem):
+        return {"type": "daily", "date": stem.replace("_", "-")}
+    # Other (e.g., projects.md)
+    return {"type": "other", "date": stem}
+
+
+@app.get("/api/exports")
+def list_exports():
+    cfg = _load_config()
+    exports_cfg = cfg.get("exports", {})
+    memory_cfg = exports_cfg.get("memory", {})
+
+    memory_dir = _PROJECT_ROOT / (memory_cfg.get("output_dir", "./exports/memory"))
+    skills_dir = _PROJECT_ROOT / (exports_cfg.get("skills_dir", "./exports/skills"))
+
+    memory_files: list[dict[str, Any]] = []
+    if memory_dir.is_dir():
+        for f in sorted(memory_dir.iterdir(), reverse=True):
+            if f.suffix in (".md", ".log") and f.is_file():
+                info = _classify_memory_file(f.name)
+                memory_files.append({
+                    "filename": f.name,
+                    "type": info["type"],
+                    "date": info["date"],
+                    "size": f.stat().st_size,
+                })
+
+    skill_files: list[dict[str, Any]] = []
+    if skills_dir.is_dir():
+        for f in sorted(skills_dir.iterdir()):
+            if f.suffix == ".md" and f.is_file():
+                skill_files.append({
+                    "filename": f.name,
+                    "size": f.stat().st_size,
+                })
+
+    return {
+        "config": {
+            "memory_dir": str(memory_cfg.get("output_dir", "./exports/memory")),
+            "skills_dir": str(exports_cfg.get("skills_dir", "./exports/skills")),
+            "mode": memory_cfg.get("mode", "openclawd"),
+            "formats": memory_cfg.get("formats", ["md"]),
+            "daily": memory_cfg.get("daily", True),
+            "weekly": memory_cfg.get("weekly", False),
+            "monthly": memory_cfg.get("monthly", False),
+        },
+        "memory": memory_files,
+        "skills": skill_files,
+    }
+
+
+@app.get("/api/exports/memory/{filename}")
+def get_memory_export(filename: str):
+    cfg = _load_config()
+    memory_dir = _PROJECT_ROOT / cfg.get("exports", {}).get("memory", {}).get(
+        "output_dir", "./exports/memory"
+    )
+    fpath = (memory_dir / filename).resolve()
+
+    # Path traversal guard
+    if not str(fpath).startswith(str(memory_dir.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    if not fpath.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    content = fpath.read_text(encoding="utf-8")
+    info = _classify_memory_file(filename)
+    return {"filename": filename, "content": content, **info}
+
+
+@app.get("/api/exports/skills/{filename}")
+def get_skill_export(filename: str):
+    cfg = _load_config()
+    skills_dir = _PROJECT_ROOT / cfg.get("exports", {}).get("skills_dir", "./exports/skills")
+    fpath = (skills_dir / filename).resolve()
+
+    if not str(fpath).startswith(str(skills_dir.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    if not fpath.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    content = fpath.read_text(encoding="utf-8")
+    return {"filename": filename, "content": content}
+
+
 # ── Static files (serve built frontend) ─────────────────────────────────────
 
 _frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 if _frontend_dist.is_dir():
     app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="frontend")
+
+
+# ── Entrypoint ────────────────────────────────────────────────────────────────
+
+
+def main() -> None:
+    try:
+        import uvicorn
+    except ImportError as exc:  # pragma: no cover
+        raise SystemExit("uvicorn is required to run the API server") from exc
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+if __name__ == "__main__":
+    main()

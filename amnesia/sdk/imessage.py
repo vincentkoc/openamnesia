@@ -122,6 +122,8 @@ def run_imessage_ingest(config: IMessageIngestConfig) -> IMessageIngestResult:
                 "mode": "sqlite",
                 "db_path": config.db_path,
                 "limit": config.limit,
+                "since_ts": config.since,
+                "until_ts": config.until,
             },
         )
     )

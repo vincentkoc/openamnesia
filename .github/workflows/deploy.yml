@@ -37,8 +37,8 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/openamnesia:latest
-            ghcr.io/${{ github.repository }}/openamnesia:${{ github.sha }}
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
       - name: Install
         run: |
           python -m pip install --upgrade pip
@@ -52,7 +52,7 @@ jobs:
           AKASH_KEY_NAME: ${{ secrets.AKASH_KEY_NAME }}
           AKASH_KEYRING_BACKEND: ${{ secrets.AKASH_KEYRING_BACKEND }}
           AKASH_NET: ${{ secrets.AKASH_NET }}
-          AKASH_IMAGE: ghcr.io/${{ github.repository }}/openamnesia:${{ github.sha }}
+          AKASH_IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
         run: |
           if [ "${{ inputs.target }}" = "render" ]; then
             make deploy-render

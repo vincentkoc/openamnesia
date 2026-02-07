@@ -165,6 +165,8 @@ CREATE TABLE IF NOT EXISTS cluster_enrichments (
 CREATE INDEX IF NOT EXISTS idx_events_source_ts ON events(source, ts);
 CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
 CREATE INDEX IF NOT EXISTS idx_events_actor_ts ON events(actor, ts);
+CREATE INDEX IF NOT EXISTS idx_sessions_start_ts ON sessions(start_ts);
+CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source);
 CREATE INDEX IF NOT EXISTS idx_moments_session ON moments(session_key);
 CREATE INDEX IF NOT EXISTS idx_mentions_source_ts ON entity_mentions(source, ts);
 CREATE INDEX IF NOT EXISTS idx_mentions_type_value ON entity_mentions(entity_type, entity_value);

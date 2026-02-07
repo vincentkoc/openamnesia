@@ -31,6 +31,7 @@ help:
 	@echo "  run          Run daemon in watch mode"
 	@echo "  source-test  Test one source (set SOURCE=imessage)"
 	@echo "  e2e-all     Ingest + discovery for all sources (MODE=recent|all)"
+	@echo "  e2e-export  Export memory + skills only (no ingest/discovery)"
 	@echo "  api         Run API server"
 	@echo "  ui          Run frontend dev server"
 	@echo "  sdk         Run interactive SDK menu"
@@ -79,8 +80,11 @@ e2e-all:
 		$(PYTHON) scripts/run_e2e.py --mode recent; \
 	fi
 
+e2e-export:
+	$(PYTHON) scripts/run_e2e.py --skip-ingest --skip-discovery
+
 api:
-	$(PYTHON) -m amnesia.api.server
+	$(PYTHON) -m uvicorn amnesia.api.server:app --host 127.0.0.1 --port 8000 --reload --reload-dir $(CURDIR)
 
 ui:
 	cd frontend && npm run dev

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -12,6 +13,7 @@ import yaml
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.table import Table
 
 from amnesia.config import load_config
 from amnesia.exports.memory import MemoryExportConfig, export_memory_range
@@ -36,6 +38,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--since-days", type=int, default=None)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--log-level", default=None)
+    parser.add_argument("--skip-ingest", action="store_true")
+    parser.add_argument("--skip-discovery", action="store_true")
+    parser.add_argument("--no-export-llm", action="store_true")
     return parser.parse_args()
 
 
@@ -139,7 +144,12 @@ def _run(cmd: list[str], env: dict[str, str]) -> int:
 
 
 def _export_outputs(
-    config_path: Path, *, since_days: int, mode: str
+    config_path: Path,
+    *,
+    since_days: int,
+    mode: str,
+    export_llm: bool,
+    log_fn: Callable[[str], None] | None,
 ) -> tuple[list[Path], list[Path]]:
     cfg = load_config(config_path)
     if not cfg.exports.enabled:
@@ -147,6 +157,8 @@ def _export_outputs(
     mem_paths: list[Path] = []
     if cfg.exports.memory.get("enabled", False):
         mem_cfg = MemoryExportConfig(**cfg.exports.memory)
+        if not export_llm:
+            mem_cfg.llm_enabled = False
         if mode == "recent" and since_days > 0:
             end_date = datetime.now(UTC).date()
             start_date = end_date - timedelta(days=max(0, since_days - 1))
@@ -155,6 +167,7 @@ def _export_outputs(
                 cfg=mem_cfg,
                 start_date=start_date,
                 end_date=end_date,
+                log_fn=log_fn,
             )
         else:
             end_date = datetime.now(UTC).date()
@@ -164,6 +177,7 @@ def _export_outputs(
                 cfg=mem_cfg,
                 start_date=start_date,
                 end_date=end_date,
+                log_fn=log_fn,
             )
     store = build_store(cfg.store)
     skills = store.list_skills(limit=200)
@@ -172,6 +186,18 @@ def _export_outputs(
     if skills:
         skill_paths = export_skills_md(skills, out_dir=cfg.exports.skills_dir)
     return mem_paths, skill_paths
+
+
+def _print_export_summary(
+    console: Console, mem_paths: list[Path], skill_paths: list[Path]
+) -> None:
+    table = Table(title="Exports")
+    table.add_column("Type")
+    table.add_column("Count", justify="right")
+    table.add_column("Sample")
+    table.add_row("Memory", str(len(mem_paths)), ", ".join(map(str, mem_paths[:3])))
+    table.add_row("Skills", str(len(skill_paths)), ", ".join(map(str, skill_paths[:3])))
+    console.print(table)
 
 
 def main() -> int:
@@ -196,7 +222,8 @@ def main() -> int:
     )
     console.print(Panel(header, title="OpenAmnesia E2E", border_style="cyan"))
 
-    _reset_db(config_path)
+    if not args.skip_ingest and not args.skip_discovery:
+        _reset_db(config_path)
 
     sources = _resolve_sources(config_path)
     if not sources:
@@ -208,54 +235,70 @@ def main() -> int:
     env["AMNESIA_NO_BANNER"] = "1"
     env["AMNESIA_LOG_LEVEL"] = cfg.log_level
 
-    stages = ["ingest"] + [f"discover:{src}" for src in sources]
+    stages = []
+    if not args.skip_ingest:
+        stages.append("ingest")
+    if not args.skip_discovery:
+        stages.extend([f"discover:{src}" for src in sources])
     since_args = _since_arg(cfg.mode, cfg.since_days)
 
-    with Progress(
-        SpinnerColumn(style="cyan"),
-        TextColumn("[bold]{task.description}"),
-        TimeElapsedColumn(),
-        console=console,
-    ) as progress:
-        task = progress.add_task("start", total=len(stages))
-        progress.update(task, description="ingest")
-        if _run_imessage_if_enabled(config_path, cfg.since_days, cfg.mode) != 0:
-            console.print("[bold red]iMessage ingest failed.[/bold red]")
-            return 1
-        ingest_cmd = [
-            "python",
-            "scripts/run_ingest.py",
-            "--config",
-            str(config_path),
-            "--reset-state",
-        ] + since_args
-        if _run(ingest_cmd, env) != 0:
-            console.print("[bold red]Ingest failed.[/bold red]")
-            return 1
-        progress.advance(task, 1)
+    if stages:
+        with Progress(
+            SpinnerColumn(style="cyan"),
+            TextColumn("[bold]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("start", total=max(1, len(stages)))
+            if not args.skip_ingest:
+                progress.update(task, description="ingest")
+                if _run_imessage_if_enabled(config_path, cfg.since_days, cfg.mode) != 0:
+                    console.print("[bold red]iMessage ingest failed.[/bold red]")
+                    return 1
+                ingest_cmd = [
+                    "python",
+                    "scripts/run_ingest.py",
+                    "--config",
+                    str(config_path),
+                    "--reset-state",
+                ] + since_args
+                if _run(ingest_cmd, env) != 0:
+                    console.print("[bold red]Ingest failed.[/bold red]")
+                    return 1
+                progress.advance(task, 1)
 
-        for src in sources:
-            progress.update(task, description=f"discover:{src}")
-            discover_cmd = [
-                "python",
-                "scripts/run_discovery.py",
-                "--source",
-                src,
-                "--limit",
-                str(cfg.discovery_limit),
-            ]
-            if cfg.mode == "recent" and cfg.since_days > 0:
-                discover_cmd += ["--since-days", str(cfg.since_days)]
-            if _run(discover_cmd, env) != 0:
-                console.print(f"[bold red]Discovery failed for {src}.[/bold red]")
-                return 1
-            progress.advance(task, 1)
+            if not args.skip_discovery:
+                for src in sources:
+                    progress.update(task, description=f"discover:{src}")
+                    discover_cmd = [
+                        "python",
+                        "scripts/run_discovery.py",
+                        "--source",
+                        src,
+                        "--limit",
+                        str(cfg.discovery_limit),
+                    ]
+                    if cfg.mode == "recent" and cfg.since_days > 0:
+                        discover_cmd += ["--since-days", str(cfg.since_days)]
+                    if _run(discover_cmd, env) != 0:
+                        console.print(f"[bold red]Discovery failed for {src}.[/bold red]")
+                        return 1
+                    progress.advance(task, 1)
+    else:
+        console.print("[bold cyan]Skipping ingest and discovery. Exporting only.[/bold cyan]")
 
+    export_llm = not args.no_export_llm
     mem_paths, skill_paths = _export_outputs(
         config_path,
         since_days=cfg.since_days,
         mode=cfg.mode,
+        export_llm=export_llm,
+        log_fn=console.print,
     )
+    if args.skip_ingest and args.skip_discovery:
+        if not export_llm:
+            console.print("[bold yellow]LLM summaries disabled for export-only run.[/bold yellow]")
+        _print_export_summary(console, mem_paths, skill_paths)
     if mem_paths:
         console.print("[bold cyan]Memory exports:[/bold cyan]")
         for path in mem_paths:
