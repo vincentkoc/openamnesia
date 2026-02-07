@@ -42,7 +42,9 @@ def main() -> int:
 
     since_ts = args.since
     if since_ts is None and args.since_days is not None and args.since_days > 0:
-        since_ts = (datetime.now(UTC) - timedelta(days=args.since_days)).isoformat(timespec="seconds")
+        since_ts = (datetime.now(UTC) - timedelta(days=args.since_days)).isoformat(
+            timespec="seconds"
+        )
     events = store.list_events_for_source(source=args.source, since_ts=since_ts, limit=args.limit)
     events_by_id = {event.event_id: event for event in events}
     embedding_result = embed_events(

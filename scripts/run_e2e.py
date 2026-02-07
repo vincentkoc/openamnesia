@@ -13,6 +13,10 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
+from amnesia.config import load_config
+from amnesia.sdk.imessage import IMessageIngestConfig, run_imessage_ingest
+from amnesia.utils.display.terminal import print_banner
+
 
 @dataclass(slots=True)
 class E2EConfig:
@@ -61,6 +65,59 @@ def _resolve_sources(path: Path) -> list[str]:
     return sources
 
 
+def _run_imessage_if_enabled(config_path: Path, since_days: int, mode: str) -> int:
+    cfg = load_config(config_path)
+    source = next((item for item in cfg.sources if item.name == "imessage"), None)
+    if source is None or not source.enabled:
+        return 0
+    mode_opt = str(source.options.get("mode", "sqlite")).lower()
+    if mode_opt != "sqlite":
+        return 0
+    since = None
+    if mode == "recent" and since_days > 0:
+        since = (datetime.now(UTC) - timedelta(days=since_days)).isoformat(timespec="seconds")
+    im_cfg = IMessageIngestConfig(
+        db_path=str(
+            Path(str(source.options.get("db_path", "~/Library/Messages/chat.db"))).expanduser()
+        ),
+        store_dsn=cfg.store.dsn,
+        state_path=cfg.daemon.state_path,
+        limit=int(source.options.get("limit", 5000)),
+        entity_granularity="week",
+        reset_state=True,
+        save_state=True,
+        since=since,
+        until=source.until_ts,
+        include_groups=source.include_groups,
+        exclude_groups=source.exclude_groups,
+        include_actors=source.include_actors,
+        exclude_actors=source.exclude_actors,
+        include_contains=source.include_contains,
+        exclude_contains=source.exclude_contains,
+    )
+    result = run_imessage_ingest(im_cfg)
+    print(
+        f"iMessage ingest: seen={result.seen} ingested={result.ingested} "
+        f"events={result.events} sessions={result.sessions} moments={result.moments}"
+    )
+    if result.error:
+        print(f"iMessage ingest error: {result.error}")
+        if result.hint:
+            print(f"hint: {result.hint}")
+        return 1
+    return 0
+
+
+def _reset_db(config_path: Path) -> None:
+    cfg = load_config(config_path)
+    dsn = cfg.store.dsn
+    if not dsn.startswith("sqlite:///"):
+        return
+    db_path = Path(dsn.removeprefix("sqlite:///"))
+    if db_path.exists():
+        db_path.unlink()
+
+
 def _since_arg(mode: str, since_days: int) -> list[str]:
     if mode == "all" or since_days <= 0:
         return []
@@ -88,11 +145,14 @@ def main() -> int:
         cfg.log_level = args.log_level
 
     console = Console()
+    print_banner()
     header = (
         f"mode={cfg.mode} since_days={cfg.since_days} "
         f"limit={cfg.discovery_limit} log_level={cfg.log_level}"
     )
     console.print(Panel(header, title="OpenAmnesia E2E", border_style="cyan"))
+
+    _reset_db(config_path)
 
     sources = _resolve_sources(config_path)
     if not sources:
@@ -113,6 +173,9 @@ def main() -> int:
     ) as progress:
         task = progress.add_task("start", total=len(stages))
         progress.update(task, description="ingest")
+        if _run_imessage_if_enabled(config_path, cfg.since_days, cfg.mode) != 0:
+            console.print("[bold red]iMessage ingest failed.[/bold red]")
+            return 1
         ingest_cmd = [
             "python",
             "scripts/run_ingest.py",

@@ -12,18 +12,9 @@ from pathlib import Path
 import yaml
 
 from amnesia.config import SourceConfig, load_config
-from amnesia.ingest.spool import JsonlSpool
-from amnesia.ingest.trawl import IncrementalFileTrawler, TrawlState
-from amnesia.models import IngestAudit, SourceStatus, utc_now
-from amnesia.pipeline.entities import extract_entities
-from amnesia.pipeline.extract import annotate_moments
-from amnesia.pipeline.momentize import momentize_sessions
-from amnesia.pipeline.normalize import normalize_records
-from amnesia.pipeline.sessionize import sessionize_events
-from amnesia.store.factory import build_store
 from amnesia.connectors.registry import build_connectors
-from amnesia.utils.logging import get_logger, setup_logging
 from amnesia.exports.memory import MemoryExportConfig, export_memory
+from amnesia.exports.skills_md import export_skills_md
 from amnesia.filters import (
     SourceFilterPipeline,
     make_exclude_actors_filter,
@@ -36,6 +27,16 @@ from amnesia.filters import (
     make_until_filter,
     parse_iso_ts,
 )
+from amnesia.ingest.spool import JsonlSpool
+from amnesia.ingest.trawl import IncrementalFileTrawler, TrawlState
+from amnesia.models import IngestAudit, SourceStatus, utc_now
+from amnesia.pipeline.entities import extract_entities
+from amnesia.pipeline.extract import annotate_moments
+from amnesia.pipeline.momentize import momentize_sessions
+from amnesia.pipeline.normalize import normalize_records
+from amnesia.pipeline.sessionize import sessionize_events
+from amnesia.store.factory import build_store
+from amnesia.utils.logging import get_logger, setup_logging
 
 try:
     from tqdm import tqdm
@@ -128,7 +129,9 @@ def _merge_terms(cli_terms: list[str], cfg_terms: list[str]) -> list[str]:
     return _split_terms(cli_terms) if cli_terms else list(cfg_terms)
 
 
-def _build_filter_pipeline(source_cfg: SourceConfig, args: argparse.Namespace) -> SourceFilterPipeline:
+def _build_filter_pipeline(
+    source_cfg: SourceConfig, args: argparse.Namespace
+) -> SourceFilterPipeline:
     pipeline = SourceFilterPipeline()
     include_contains = _merge_terms(args.include_contains, source_cfg.include_contains)
     exclude_contains = _merge_terms(args.exclude_contains, source_cfg.exclude_contains)
@@ -253,8 +256,14 @@ def main() -> int:
 
         records, _dropped = pipeline.apply(records)
         if args.include_groups and not records and pre_group_counts:
-            top_groups = sorted(pre_group_counts.items(), key=lambda item: item[1], reverse=True)[:5]
-            logger.info("No records after include-groups filter for %s. Top groups: %s", source_name, top_groups)
+            top_groups = sorted(pre_group_counts.items(), key=lambda item: item[1], reverse=True)[
+                :5
+            ]
+            logger.info(
+                "No records after include-groups filter for %s. Top groups: %s",
+                source_name,
+                top_groups,
+            )
         if args.max_records_per_source is not None:
             records = records[: args.max_records_per_source]
         events = normalize_records(records)
@@ -330,6 +339,10 @@ def main() -> int:
     if config.exports.enabled and config.exports.memory.get("enabled", False):
         mem_cfg = MemoryExportConfig(**config.exports.memory)
         export_memory(dsn=config.store.dsn, cfg=mem_cfg)
+    if config.exports.enabled:
+        skills = store.list_skills(limit=200)
+        if skills:
+            export_skills_md(skills, out_dir=config.exports.skills_dir)
 
         if not args.keep_spool:
             spool.cleanup(segments)
