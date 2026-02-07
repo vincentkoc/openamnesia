@@ -77,6 +77,61 @@ amnesia-daemon --config config.yaml --once --events-limit 20
 python scripts/run_ingest.py --config config.yaml --entity-granularity week
 ```
 
+7.1 Run semantic discovery (embeddings -> clusters -> enrichment):
+```bash
+python scripts/run_discovery.py --source imessage --limit 5000
+```
+
+Single-command iMessage E2E (ingest + discovery + verification):
+```bash
+python scripts/imessage_e2e.py
+```
+
+Run with strict LLM enrichment + live debug:
+```bash
+AMNESIA_LOG_LEVEL=DEBUG python scripts/imessage_e2e.py --use-llm --discovery-limit 20 --llm-max-clusters 5
+```
+
+Inspect DB + enrichment outputs after a run:
+```bash
+python scripts/inspect_imessage_e2e.py --top 10
+```
+
+Export daily memory files (md + json):
+```bash
+python scripts/run_ingest.py --config config.yaml
+```
+
+API (read-only):
+```bash
+amnesia-api --host 0.0.0.0 --port 8000
+```
+
+Memory endpoints:
+- /api/memory/daily?date=YYYY-MM-DD
+- /api/memory/daily/latest
+- /api/memory/daily/range?start=YYYY-MM-DD&end=YYYY-MM-DD
+
+Inspect entity rollup time-series (hour/day/week):
+```bash
+python scripts/inspect_imessage_timeseries.py --granularity day --top 8
+```
+
+Repeatable "golden" iMessage E2E (pipeline + inspectors):
+```bash
+make imessage-e2e-golden
+```
+
+End-to-end demo (ingest + discovery for all enabled sources):
+```bash
+make e2e-all
+```
+
+Initialize E2E configs:
+```bash
+python scripts/imessage_e2e.py --init-config
+```
+
 8. Run standalone iMessage SQLite ingest (SDK + local config, no daemon):
 ```bash
 python scripts/ingest_imessage_sqlite.py
@@ -164,6 +219,21 @@ python scripts/test_source.py --config config.yaml --source imessage \
   - `--entity-granularity day|week|month`
   - `--state-path .amnesia_trawl_state.yaml`
   - `--keep-spool` (debug)
+
+## iMessage E2E knobs
+- `--use-llm / --no-use-llm`
+- `--llm-model gpt-5-nano`
+- `--llm-max-clusters 5`
+- `--llm-max-tokens 160` (auto-bumped for GPT-5 structured mode)
+- `--llm-retries 3`
+- `--llm-retry-min-seconds 0.5`
+- `--llm-retry-max-seconds 4.0`
+- `--llm-throttle-seconds 0.0`
+- `--show-debug-trace` (prints end-of-run debug table; live debug stream is default in DEBUG level)
+
+LLM logging controls:
+- `AMNESIA_LITELLM_LOG_LEVEL=WARNING|INFO|DEBUG`
+- `AMNESIA_LITELLM_TRACE=true` only when you want raw provider request/response trace output
 
 Create a new source scaffold fast:
 ```bash
