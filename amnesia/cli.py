@@ -10,7 +10,7 @@ import yaml
 
 @dataclass(slots=True)
 class CliDefaults:
-    since_days: int = 30
+    since_days: int = 7
     discovery_limit: int = 500
     mode: str = "recent"
     config_path: str = "config.yaml"
@@ -23,7 +23,7 @@ def _load_defaults(config_path: Path) -> CliDefaults:
         raw = yaml.safe_load(fh) or {}
     e2e = raw.get("e2e", {}) or {}
     return CliDefaults(
-        since_days=int(e2e.get("since_days", 30)),
+        since_days=int(e2e.get("since_days", 7)),
         discovery_limit=int(e2e.get("discovery_limit", 500)),
         mode=str(e2e.get("mode", "recent")),
         config_path=str(config_path),

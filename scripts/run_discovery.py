@@ -14,6 +14,7 @@ from amnesia.config import StoreConfig
 from amnesia.pipeline.cluster_enrich import ClusterEnrichmentOptions, enrich_clusters
 from amnesia.pipeline.clustering import cluster_embeddings
 from amnesia.pipeline.embedding import HashEmbeddingProvider, embed_events
+from amnesia.pipeline.memory_materialize import materialize_from_enrichments
 from amnesia.store.factory import build_store
 from amnesia.utils.logging import setup_logging
 
@@ -23,7 +24,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--source", required=True)
     parser.add_argument("--store-dsn", default="sqlite:///./data/amnesia.db")
     parser.add_argument("--since")
-    parser.add_argument("--since-days", type=int, default=30)
+    parser.add_argument("--since-days", type=int, default=7)
     parser.add_argument("--limit", type=int, default=5000)
     parser.add_argument("--dims", type=int, default=128)
     parser.add_argument("--use-llm", action="store_true")
@@ -46,6 +47,7 @@ def main() -> int:
             timespec="seconds"
         )
     events = store.list_events_for_source(source=args.source, since_ts=since_ts, limit=args.limit)
+    events.sort(key=lambda event: event.ts)
     events_by_id = {event.event_id: event for event in events}
     embedding_result = embed_events(
         events,
@@ -63,11 +65,13 @@ def main() -> int:
             max_tokens=max(32, args.llm_max_tokens),
         ),
     )
+    materialized = materialize_from_enrichments(cluster_result.clusters, enrichments)
 
     inserted_embeddings = store.save_event_embeddings(embedding_result.embeddings)
     inserted_clusters = store.save_event_clusters(cluster_result.clusters)
     inserted_memberships = store.save_cluster_memberships(cluster_result.memberships)
     inserted_enrichments = store.save_cluster_enrichments(enrichments)
+    inserted_skills = store.save_skill_candidates(materialized.skill_candidates)
     store.close()
 
     payload = {
@@ -77,11 +81,13 @@ def main() -> int:
         "clusters": len(cluster_result.clusters),
         "memberships": len(cluster_result.memberships),
         "enrichments": len(enrichments),
+        "skills": len(materialized.skill_candidates),
         "inserted": {
             "embeddings": inserted_embeddings,
             "clusters": inserted_clusters,
             "memberships": inserted_memberships,
             "enrichments": inserted_enrichments,
+            "skills": inserted_skills,
         },
         "top_clusters": [
             {
@@ -101,12 +107,13 @@ def main() -> int:
     print(
         f"source={payload['source']} events={payload['events']} embeddings={payload['embeddings']} "
         f"clusters={payload['clusters']} memberships={payload['memberships']} "
-        f"enrichments={payload['enrichments']}"
+        f"enrichments={payload['enrichments']} skills={payload['skills']}"
     )
     print(
         "inserted "
         f"embeddings={inserted_embeddings} clusters={inserted_clusters} "
-        f"memberships={inserted_memberships} enrichments={inserted_enrichments}"
+        f"memberships={inserted_memberships} enrichments={inserted_enrichments} "
+        f"skills={inserted_skills}"
     )
     for item in payload["top_clusters"][:5]:
         print(f"- {item['size']} :: {item['label']}")

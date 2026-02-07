@@ -14,14 +14,17 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 from amnesia.config import load_config
+from amnesia.exports.memory import MemoryExportConfig, export_memory
+from amnesia.exports.skills_md import export_skills_md
 from amnesia.sdk.imessage import IMessageIngestConfig, run_imessage_ingest
+from amnesia.store.factory import build_store
 from amnesia.utils.display.terminal import print_banner
 
 
 @dataclass(slots=True)
 class E2EConfig:
     mode: str = "recent"
-    since_days: int = 30
+    since_days: int = 7
     discovery_limit: int = 500
     log_level: str = "INFO"
 
@@ -44,7 +47,7 @@ def _load_e2e_config(path: Path) -> E2EConfig:
     e2e_raw = raw.get("e2e", {}) or {}
     return E2EConfig(
         mode=str(e2e_raw.get("mode", "recent")),
-        since_days=int(e2e_raw.get("since_days", 30)),
+        since_days=int(e2e_raw.get("since_days", 7)),
         discovery_limit=int(e2e_raw.get("discovery_limit", 500)),
         log_level=str(e2e_raw.get("log_level", "INFO")),
     )
@@ -130,6 +133,20 @@ def _run(cmd: list[str], env: dict[str, str]) -> int:
     return result.returncode
 
 
+def _export_outputs(config_path: Path) -> None:
+    cfg = load_config(config_path)
+    if not cfg.exports.enabled:
+        return
+    if cfg.exports.memory.get("enabled", False):
+        mem_cfg = MemoryExportConfig(**cfg.exports.memory)
+        export_memory(dsn=cfg.store.dsn, cfg=mem_cfg)
+    store = build_store(cfg.store)
+    skills = store.list_skills(limit=200)
+    store.close()
+    if skills:
+        export_skills_md(skills, out_dir=cfg.exports.skills_dir)
+
+
 def main() -> int:
     args = _parse_args()
     config_path = Path(args.config)
@@ -160,6 +177,8 @@ def main() -> int:
         return 2
 
     env = dict(os.environ)
+    env["AMNESIA_BANNER_PRINTED"] = "1"
+    env["AMNESIA_NO_BANNER"] = "1"
     env["AMNESIA_LOG_LEVEL"] = cfg.log_level
 
     stages = ["ingest"] + [f"discover:{src}" for src in sources]
@@ -205,6 +224,7 @@ def main() -> int:
                 return 1
             progress.advance(task, 1)
 
+    _export_outputs(config_path)
     console.print("[bold green]E2E complete.[/bold green]")
     return 0
 

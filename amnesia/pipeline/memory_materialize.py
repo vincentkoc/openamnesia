@@ -22,77 +22,191 @@ class SkillSeed:
     support: int
 
 
-_SKILL_PROFILES: dict[str, dict[str, Any]] = {
-    "event_planning": {
-        "name": "Plan and follow up on events",
-        "steps": [
-            "capture event details and constraints",
-            "list stakeholders and follow-ups",
-            "track next actions and deadlines",
-        ],
-        "checks": ["event_context_present", "next_action_present"],
-    },
-    "networking_intro": {
-        "name": "Create and track introductions",
-        "steps": [
-            "identify the two parties",
-            "collect context and goal",
-            "draft intro and follow-up reminders",
-        ],
-        "checks": ["contacts_present", "intro_goal_present"],
-    },
-    "contact_capture": {
-        "name": "Capture and confirm new contacts",
-        "steps": [
-            "extract name and source context",
-            "confirm spelling and affiliation",
-            "store as a contact candidate",
-        ],
-        "checks": ["person_name_present", "source_context_present"],
-    },
-    "coordination": {
-        "name": "Coordinate schedules and follow-ups",
-        "steps": [
-            "propose time windows",
-            "confirm availability",
-            "log next-step reminders",
-        ],
-        "checks": ["time_reference_present", "followup_intent_present"],
-    },
-    "stakeholder_alignment": {
-        "name": "Align stakeholders on risks and fit",
-        "steps": [
-            "summarize risk or fit concerns",
-            "collect stakeholder positions",
-            "record decision blockers",
-        ],
-        "checks": ["stakeholders_present", "risk_or_fit_present"],
-    },
-    "research_synthesis": {
-        "name": "Synthesize research into next actions",
-        "steps": [
-            "collect options and constraints",
-            "compare trade-offs",
-            "recommend next actions",
-        ],
-        "checks": ["options_present", "decision_context_present"],
-    },
-    "frontend_terminal_build": {
-        "name": "Ship frontend terminal experiences",
-        "steps": [
-            "define interaction goal",
-            "mock terminal flows",
-            "implement and validate UX",
-        ],
-        "checks": ["ux_goal_present", "flow_defined"],
-    },
+_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "but",
+    "by",
+    "can",
+    "for",
+    "from",
+    "had",
+    "has",
+    "have",
+    "if",
+    "in",
+    "into",
+    "is",
+    "it",
+    "its",
+    "just",
+    "me",
+    "my",
+    "of",
+    "on",
+    "or",
+    "our",
+    "so",
+    "that",
+    "the",
+    "their",
+    "then",
+    "they",
+    "this",
+    "to",
+    "up",
+    "we",
+    "with",
+    "you",
+    "your",
 }
 
-_INTENT_ALIASES: dict[str, str] = {
-    "networking_followup": "networking_intro",
-    "question_preparation": "research_synthesis",
-    "stakeholder_alignment": "stakeholder_alignment",
-    "coordination": "coordination",
+_ACTION_PHRASES = [
+    "follow up",
+    "reach out",
+    "set up",
+    "check in",
+    "sync up",
+]
+
+_ACTION_VERBS = [
+    "plan",
+    "schedule",
+    "coordinate",
+    "connect",
+    "introduce",
+    "research",
+    "evaluate",
+    "compare",
+    "design",
+    "build",
+    "implement",
+    "ship",
+    "deploy",
+    "debug",
+    "fix",
+    "review",
+    "draft",
+    "write",
+    "update",
+    "refactor",
+    "summarize",
+    "track",
+    "follow",
+]
+
+_ACTION_STEPS = {
+    "plan": [
+        "capture goals and constraints",
+        "identify stakeholders and timing",
+        "outline next actions and deadlines",
+    ],
+    "schedule": [
+        "propose time windows",
+        "confirm availability",
+        "send invite and reminders",
+    ],
+    "coordinate": [
+        "align on objectives",
+        "assign owners and next steps",
+        "track follow-ups",
+    ],
+    "connect": [
+        "identify the parties",
+        "collect context and desired outcome",
+        "draft the intro and follow-up",
+    ],
+    "introduce": [
+        "identify the parties",
+        "collect context and desired outcome",
+        "draft the intro and follow-up",
+    ],
+    "research": [
+        "collect sources and constraints",
+        "compare options and trade-offs",
+        "summarize recommendations",
+    ],
+    "evaluate": [
+        "list evaluation criteria",
+        "compare options",
+        "record decision and next step",
+    ],
+    "design": [
+        "define interaction goal",
+        "sketch flow and edge cases",
+        "validate with quick prototype",
+    ],
+    "build": [
+        "define scope and success criteria",
+        "implement the workflow",
+        "validate output and iterate",
+    ],
+    "deploy": [
+        "prepare release checklist",
+        "ship and verify",
+        "monitor for regressions",
+    ],
+    "debug": [
+        "reproduce the issue",
+        "inspect logs and traces",
+        "apply fix and verify",
+    ],
+    "fix": [
+        "identify root cause",
+        "apply fix",
+        "verify behavior",
+    ],
+    "review": [
+        "gather context",
+        "review for gaps",
+        "record outcomes and next steps",
+    ],
+    "draft": [
+        "collect required inputs",
+        "draft the artifact",
+        "review and finalize",
+    ],
+    "write": [
+        "collect required inputs",
+        "draft the artifact",
+        "review and finalize",
+    ],
+    "update": [
+        "identify changes",
+        "apply updates",
+        "confirm correctness",
+    ],
+    "summarize": [
+        "collect key points",
+        "write concise summary",
+        "capture next actions",
+    ],
+    "track": [
+        "log the current state",
+        "set reminders or checkpoints",
+        "capture outcome",
+    ],
+    "follow up": [
+        "confirm the ask",
+        "send reminder",
+        "log the outcome",
+    ],
+}
+
+_TITLE_OVERRIDES = {
+    "ai": "AI",
+    "api": "API",
+    "llm": "LLM",
+    "ml": "ML",
+    "mlops": "MLOps",
+    "ui": "UI",
+    "ux": "UX",
+    "gpt": "GPT",
 }
 
 
@@ -153,22 +267,27 @@ def _derive_skill_candidates(skill_seed: list[SkillSeed]) -> list[dict[str, Any]
     support_sum: dict[str, int] = {}
     intent_samples: dict[str, list[str]] = {}
     summary_samples: dict[str, list[str]] = {}
+    action_samples: dict[str, str] = {}
+    topic_samples: dict[str, list[str]] = {}
 
     for seed in skill_seed:
-        skill_key = _classify_skill_key(seed.intent, seed.summary)
-        if not skill_key:
+        action = _extract_action(seed.intent, seed.summary)
+        topics = _extract_topics(seed.intent, seed.summary, action)
+        skill_key = _build_skill_key(action, topics)
+        if not skill_key or not topics:
             continue
         count_by_key[skill_key] += 1
         confidence_sum[skill_key] = confidence_sum.get(skill_key, 0.0) + seed.confidence
         support_sum[skill_key] = support_sum.get(skill_key, 0) + seed.support
         intent_samples.setdefault(skill_key, []).append(seed.intent)
         summary_samples.setdefault(skill_key, []).append(seed.summary)
+        action_samples[skill_key] = action
+        topic_samples.setdefault(skill_key, []).extend(topics)
 
     candidates: list[dict[str, Any]] = []
     for skill_key, freq in count_by_key.most_common():
-        profile = _SKILL_PROFILES.get(skill_key)
-        if not profile:
-            continue
+        action = action_samples.get(skill_key, "track")
+        topics = _top_topics(topic_samples.get(skill_key, []))
         avg_conf = confidence_sum[skill_key] / max(1, freq)
         total_support = support_sum[skill_key]
         sample_intents = sorted(set(intent_samples.get(skill_key, [])))[:3]
@@ -176,14 +295,21 @@ def _derive_skill_candidates(skill_seed: list[SkillSeed]) -> list[dict[str, Any]
             _clip_summary(summary) for summary in summary_samples.get(skill_key, [])[:2]
         ]
         composio_toolkits = _suggest_composio_toolkits(
-            " ".join(sample_summaries + sample_intents + [profile["name"]])
+            " ".join(sample_summaries + sample_intents + topics + [action])
         )
+        name = _format_skill_name(action, topics)
+        steps = _ACTION_STEPS.get(action, _ACTION_STEPS["track"])
+        checks = _build_checks(action, topics)
         candidates.append(
             {
-                "name": profile["name"],
-                "trigger": {"skill_key": skill_key, "sample_intents": sample_intents},
-                "steps": profile["steps"],
-                "checks": profile["checks"],
+                "name": name,
+                "trigger": {
+                    "action": action,
+                    "topics": topics,
+                    "sample_intents": sample_intents,
+                },
+                "steps": steps,
+                "checks": checks,
                 "composio": {"toolkits": composio_toolkits},
                 "metrics": {
                     "cluster_frequency": freq,
@@ -204,42 +330,76 @@ def _clean_token(value: str) -> str:
 
 def _infer_intent_from_summary(summary: str) -> str:
     low = summary.lower()
-    if "barclays" in low or "panel" in low or "open source" in low:
-        return "stakeholder_alignment"
-    if "intro" in low or "connect" in low or "community" in low:
-        return "networking_followup"
-    if "ask" in low or "question" in low:
-        return "question_preparation"
-    if "schedule" in low or "call" in low or "breakfast" in low:
-        return "coordination"
-    return "cluster_summary_workflow"
+    if "follow up" in low or "reach out" in low or "connect" in low:
+        return "follow up"
+    for verb in _ACTION_VERBS:
+        if verb in low:
+            return verb
+    return "track"
 
 
-def _classify_skill_key(intent: str, summary: str) -> str | None:
-    normalized_intent = _clean_token(intent)
-    if normalized_intent in _INTENT_ALIASES:
-        return _INTENT_ALIASES[normalized_intent]
-
-    text = " ".join([normalized_intent, summary.lower()])
-    if _has_any(text, ("event", "meetup", "meet up", "conference", "panel", "summit", "webinar")):
-        return "event_planning"
-    if _has_any(text, ("intro", "introduc", "connect", "network", "reach out", "follow up")):
-        return "networking_intro"
-    if _has_any(text, ("contact", "met", "meet", "name", "who is")):
-        return "contact_capture"
-    if _has_any(text, ("schedule", "calendar", "call", "meeting", "sync", "f2f")):
-        return "coordination"
-    if _has_any(text, ("stakeholder", "security", "risk", "compliance", "open source", "use case")):
-        return "stakeholder_alignment"
-    if _has_any(text, ("compare", "evaluate", "option", "decision", "trade-off", "tradeoff")):
-        return "research_synthesis"
-    if _has_any(text, ("frontend", "terminal", "cli", "tui", "ui", "ux")):
-        return "frontend_terminal_build"
-    return None
+def _extract_action(intent: str, summary: str) -> str:
+    text = f"{intent} {summary}".lower()
+    for phrase in _ACTION_PHRASES:
+        if phrase in text:
+            return phrase
+    for verb in _ACTION_VERBS:
+        if re.search(rf"\\b{re.escape(verb)}\\b", text):
+            return verb
+    return "track"
 
 
-def _has_any(text: str, needles: tuple[str, ...]) -> bool:
-    return any(needle in text for needle in needles)
+def _extract_topics(intent: str, summary: str, action: str) -> list[str]:
+    text = f"{intent} {summary}".lower()
+    cleaned = re.sub(r"[^a-z0-9_\\s-]+", " ", text)
+    tokens = [token.strip("-_") for token in cleaned.split() if token.strip("-_")]
+    action_tokens = set(action.split())
+    topics = []
+    for token in tokens:
+        if token in _STOPWORDS or token in action_tokens or len(token) <= 2:
+            continue
+        if token.isdigit():
+            continue
+        topics.append(token)
+    return topics[:12]
+
+
+def _build_skill_key(action: str, topics: list[str]) -> str | None:
+    if not action or not topics:
+        return None
+    key = f"{action}:{' '.join(topics[:3])}"
+    return key[:120]
+
+
+def _top_topics(topics: list[str], limit: int = 4) -> list[str]:
+    if not topics:
+        return []
+    counts = Counter(topics)
+    return [item for item, _count in counts.most_common(limit)]
+
+
+def _format_skill_name(action: str, topics: list[str]) -> str:
+    action_label = _title_token(action)
+    if not topics:
+        return f"Task: {action_label}"
+    topic_label = " ".join(_title_token(topic) for topic in topics[:3])
+    return f"Task: {action_label} {topic_label}"
+
+
+def _title_token(token: str) -> str:
+    if token in _TITLE_OVERRIDES:
+        return _TITLE_OVERRIDES[token]
+    return token.replace("_", " ").title()
+
+
+def _build_checks(action: str, topics: list[str]) -> list[str]:
+    checks = ["context_present", "next_action_present"]
+    joined = " ".join(topics).lower()
+    if any(term in joined for term in ("meeting", "calendar", "schedule", "invite", "call")):
+        checks.append("time_reference_present")
+    if action in {"connect", "introduce", "follow up"}:
+        checks.append("contacts_present")
+    return list(dict.fromkeys(checks))
 
 
 def _clip_summary(summary: str, limit: int = 96) -> str:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 import os
 import sqlite3
 from contextlib import asynccontextmanager
@@ -310,14 +309,154 @@ def get_skill(skill_id: str):
     return result
 
 
+class SkillStatusUpdate(BaseModel):
+    status: str  # candidate, validated, promoted, rejected
+
+
+@app.patch("/api/skills/{skill_id}")
+def update_skill(skill_id: str, body: SkillStatusUpdate):
+    allowed = {"candidate", "validated", "promoted", "rejected"}
+    if body.status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Invalid status. Must be one of: {', '.join(sorted(allowed))}"),
+        )
+    conn = _get_conn()
+    # Temporarily allow writes for this mutation
+    conn.execute("PRAGMA query_only=OFF")
+    try:
+        cur = conn.execute(
+            "UPDATE skills SET status = ?, updated_ts = datetime('now') WHERE skill_id = ?",
+            (body.status, skill_id),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Skill not found")
+    finally:
+        conn.execute("PRAGMA query_only=ON")
+    return {"ok": True, "skill_id": skill_id, "status": body.status}
+
+
 # ── Sources ──────────────────────────────────────────────────────────────────
+
+
+def _compute_heartbeat(conn: sqlite3.Connection, source: str, points: int = 60) -> list[int]:
+    """Compute a heartbeat array: event counts in recent 5-min buckets, normalized 0-100."""
+    rows = conn.execute(
+        """
+        SELECT strftime('%Y-%m-%dT%H:', ts)
+               || printf('%02d', (CAST(strftime('%M', ts) AS INT) / 5) * 5)
+               as bucket,
+               COUNT(*) as cnt
+        FROM events
+        WHERE source = ? AND ts >= datetime('now', '-5 hours')
+        GROUP BY bucket ORDER BY bucket ASC
+        """,
+        (source,),
+    ).fetchall()
+    counts = [r["cnt"] for r in rows]
+    if not counts:
+        return [0] * points
+    mx = max(counts) or 1
+    normalized = [min(100, round((c / mx) * 100)) for c in counts]
+    # Pad/trim to desired length
+    if len(normalized) >= points:
+        return normalized[-points:]
+    return [0] * (points - len(normalized)) + normalized
 
 
 @app.get("/api/sources")
 def list_sources():
     conn = _get_conn()
     rows = conn.execute("SELECT * FROM source_status ORDER BY source").fetchall()
-    return {"items": _rows_to_dicts(rows)}
+    items = _rows_to_dicts(rows)
+    for item in items:
+        item["heartbeat"] = _compute_heartbeat(conn, item["source"])
+    return {"items": items}
+
+
+@app.get("/api/sources/{source}/diagnostics")
+def get_source_diagnostics(source: str):
+    conn = _get_conn()
+    # Verify source exists
+    row = conn.execute("SELECT * FROM source_status WHERE source = ?", (source,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    heartbeat = _compute_heartbeat(conn, source, 120)
+
+    # Stats: compute from recent events
+    stats_row = conn.execute(
+        """
+        SELECT COUNT(*) as total,
+               SUM(CASE WHEN tool_status = 'error' THEN 1 ELSE 0 END) as errors
+        FROM events WHERE source = ? AND ts >= datetime('now', '-24 hours')
+        """,
+        (source,),
+    ).fetchone()
+    total_24h = stats_row["total"] or 0
+    errors_24h = stats_row["errors"] or 0
+    throughput = round(total_24h / 86400, 2)  # events per second
+
+    # Uptime: percentage of 5-min buckets with activity in last 24h
+    active_buckets = (
+        conn.execute(
+            """
+        SELECT COUNT(DISTINCT strftime('%Y-%m-%dT%H:', ts) ||
+               printf('%02d', (CAST(strftime('%M', ts) AS INT) / 5) * 5)) as cnt
+        FROM events WHERE source = ? AND ts >= datetime('now', '-24 hours')
+        """,
+            (source,),
+        ).fetchone()["cnt"]
+        or 0
+    )
+    uptime_pct = round(min(100.0, (active_buckets / 288) * 100), 1)
+
+    # Diagnosis
+    is_fresh = (
+        conn.execute(
+            "SELECT COUNT(*) FROM events WHERE source = ? AND ts >= datetime('now', '-1 hour')",
+            (source,),
+        ).fetchone()[0]
+        > 0
+    )
+    error_rate = errors_24h / max(total_24h, 1)
+    issues: list[str] = []
+    if not is_fresh:
+        issues.append("No events in last hour")
+    if error_rate > 0.1:
+        issues.append(f"High error rate: {error_rate:.0%}")
+    if uptime_pct < 50:
+        issues.append(f"Low uptime: {uptime_pct}%")
+    diag_status = "healthy" if not issues else ("degraded" if len(issues) < 2 else "error")
+
+    return {
+        "heartbeat": heartbeat,
+        "stats": {
+            "avg_latency_ms": 0,  # Not tracked yet — placeholder
+            "p99_latency_ms": 0,
+            "uptime_pct": uptime_pct,
+            "errors_24h": errors_24h,
+            "throughput_eps": throughput,
+        },
+        "info": {
+            "version": "0.1.0",
+            "protocol": "file-watch",
+            "adapter": source,
+            "pid": os.getpid(),
+        },
+        "config": {
+            "poll_interval_s": 5,
+            "batch_size": 100,
+            "retry_max": 3,
+            "log_path": f"~/.amnesia/logs/{source}.log",
+        },
+        "diagnosis": {
+            "status": diag_status,
+            "last_check": row["last_poll_ts"],
+            "issues": issues,
+        },
+    }
 
 
 # ── Timeline ─────────────────────────────────────────────────────────────────

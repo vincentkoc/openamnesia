@@ -5,6 +5,10 @@
 </p>
 
 <p align="center">
+  <img src="docs/screenshot.png" alt="Open Amnesia screenshot" width="900" />
+</p>
+
+<p align="center">
   A continual learning context engine that turns messy session logs into structured moments, facts, and skills.
 </p>
 
