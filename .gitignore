@@ -220,3 +220,4 @@ exports/
 *.db
 *.db-shm
 .amnesia_trawl_state.yaml
+.claude/settings.local.json
