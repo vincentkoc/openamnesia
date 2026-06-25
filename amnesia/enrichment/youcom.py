@@ -8,7 +8,7 @@ from typing import Any
 
 
 def youcom_search(query: str, *, count: int = 3, freshness: str = "month") -> list[dict[str, Any]]:
-    api_key = os.environ.get("YOUCOM_API_KEY", "").strip()
+    api_key = (os.environ.get("YDC_API_KEY") or os.environ.get("YOUCOM_API_KEY", "")).strip()
     if not api_key or not query:
         return []
     base = "https://ydc-index.io/v1/search"
