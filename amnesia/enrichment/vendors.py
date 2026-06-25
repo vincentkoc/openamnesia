@@ -11,7 +11,7 @@ except Exception:
 
 
 def get_youcom_api_key() -> str | None:
-    value = os.environ.get("YOUCOM_API_KEY", "").strip()
+    value = (os.environ.get("YDC_API_KEY") or os.environ.get("YOUCOM_API_KEY", "")).strip()
     return value or None
 
 
